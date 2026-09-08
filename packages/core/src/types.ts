@@ -87,11 +87,19 @@ export interface UnitRepealedEvent extends BaseChangeEvent {
   path: string;
 }
 
+/** A single operation in a word-level diff */
+export interface WordDiffOp {
+  type: "equal" | "insert" | "delete";
+  text: string;
+}
+
 export interface UnitAmendedEvent extends BaseChangeEvent {
   type: "UnitAmended";
   path: string;
   before: string;
   after: string;
+  /** Word-level diff computed by diff-match-patch */
+  wordDiff: WordDiffOp[];
 }
 
 export interface UnitRenumberedEvent extends BaseChangeEvent {

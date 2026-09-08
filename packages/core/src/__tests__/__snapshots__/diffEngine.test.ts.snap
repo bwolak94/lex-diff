@@ -1,0 +1,152 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Golden snapshots — 10 amendment scenarios > snapshot: complex: renumber + amend + add 1`] = `
+[
+  {
+    "hasWordDiff": true,
+    "path": "art=1/ustep=2",
+    "severity": "medium",
+    "type": "UnitAmended",
+  },
+  {
+    "hasWordDiff": true,
+    "path": "art=3/ustep=1",
+    "severity": "medium",
+    "type": "UnitAmended",
+  },
+  {
+    "hasWordDiff": true,
+    "path": "art=5/ustep=1",
+    "severity": "medium",
+    "type": "UnitAmended",
+  },
+  {
+    "fromPath": "art=4",
+    "severity": "low",
+    "toPath": "art=4a",
+    "type": "UnitRenumbered",
+  },
+  {
+    "fromPath": "art=4/ustep=1",
+    "severity": "low",
+    "toPath": "art=4a/ustep=1",
+    "type": "UnitRenumbered",
+  },
+  {
+    "path": "art=7",
+    "severity": "high",
+    "type": "UnitRepealed",
+  },
+  {
+    "path": "art=2/punkt=3",
+    "severity": "medium",
+    "type": "UnitAdded",
+  },
+]
+`;
+
+exports[`Golden snapshots — 10 amendment scenarios > snapshot: consolidated text (jednolity tekst) 1`] = `
+[
+  {
+    "severity": "high",
+    "tjEli": "DU/2024/100",
+    "type": "ActConsolidated",
+  },
+]
+`;
+
+exports[`Golden snapshots — 10 amendment scenarios > snapshot: empty arrays 1`] = `[]`;
+
+exports[`Golden snapshots — 10 amendment scenarios > snapshot: identical acts — no changes 1`] = `[]`;
+
+exports[`Golden snapshots — 10 amendment scenarios > snapshot: mixed add, repeal, amend 1`] = `
+[
+  {
+    "hasWordDiff": true,
+    "path": "art=4",
+    "severity": "medium",
+    "type": "UnitAmended",
+  },
+  {
+    "path": "art=3",
+    "severity": "high",
+    "type": "UnitRepealed",
+  },
+  {
+    "path": "art=11",
+    "severity": "medium",
+    "type": "UnitAdded",
+  },
+]
+`;
+
+exports[`Golden snapshots — 10 amendment scenarios > snapshot: nested path amendments 1`] = `
+[
+  {
+    "hasWordDiff": true,
+    "path": "art=1/ustep=2",
+    "severity": "medium",
+    "type": "UnitAmended",
+  },
+  {
+    "hasWordDiff": true,
+    "path": "art=2/ustep=1",
+    "severity": "medium",
+    "type": "UnitAmended",
+  },
+]
+`;
+
+exports[`Golden snapshots — 10 amendment scenarios > snapshot: one article added 1`] = `
+[
+  {
+    "path": "art=11",
+    "severity": "medium",
+    "type": "UnitAdded",
+  },
+]
+`;
+
+exports[`Golden snapshots — 10 amendment scenarios > snapshot: one article renumbered 1`] = `
+[
+  {
+    "fromPath": "art=2",
+    "severity": "low",
+    "toPath": "art=2a",
+    "type": "UnitRenumbered",
+  },
+]
+`;
+
+exports[`Golden snapshots — 10 amendment scenarios > snapshot: one article repealed 1`] = `
+[
+  {
+    "path": "art=10",
+    "severity": "high",
+    "type": "UnitRepealed",
+  },
+]
+`;
+
+exports[`Golden snapshots — 10 amendment scenarios > snapshot: three articles amended 1`] = `
+[
+  {
+    "hasWordDiff": true,
+    "path": "art=2",
+    "severity": "medium",
+    "type": "UnitAmended",
+  },
+  {
+    "hasWordDiff": true,
+    "path": "art=5",
+    "severity": "medium",
+    "type": "UnitAmended",
+  },
+  {
+    "hasWordDiff": true,
+    "path": "art=9",
+    "severity": "medium",
+    "type": "UnitAmended",
+  },
+]
+`;

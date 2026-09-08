@@ -17,7 +17,8 @@
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "publish-dry-run": "npm publish --dry-run"
   },
   "dependencies": {
     "diff-match-patch": "^1.0.5",

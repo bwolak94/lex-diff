@@ -11,7 +11,8 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "publish-dry-run": "npm publish --dry-run"
   },
   "dependencies": {
     "@lexdiff/core": "workspace:*",
