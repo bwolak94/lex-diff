@@ -8,18 +8,24 @@
     "build": "tsc -p tsconfig.json",
     "dev": "node --watch dist/server.js",
     "start": "node dist/server.js",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "clean": "rm -rf dist"
   },
   "dependencies": {
     "@fastify/swagger": "^9.4.0",
     "@fastify/swagger-ui": "^5.2.0",
+    "@lexdiff/core": "workspace:*",
     "@lexdiff/db": "workspace:*",
     "fastify": "^5.2.1",
+    "fastify-type-provider-zod": "^4.0.2",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
-    "typescript": "^5.7.2"
+    "@vitest/coverage-v8": "^2.1.8",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
   }
 }

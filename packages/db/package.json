@@ -20,6 +20,7 @@
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
+    "@lexdiff/core": "workspace:*",
     "drizzle-orm": "^0.38.3",
     "pg": "^8.13.1"
   },
