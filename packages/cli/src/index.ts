@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander";
+import { Eli, EliClient, ActParser } from "@lexdiff/core";
 
 const program = new Command();
 
@@ -10,9 +11,16 @@ program
 
 program
   .command("show <eli>")
-  .description("Show a legal document by ELI identifier")
-  .action((eli: string) => {
-    console.log(`show: not implemented (eli=${eli})`);
+  .description("Show a legal document as a JSON unit tree")
+  .action(async (rawEli: string) => {
+    const eli = Eli.parse(rawEli);
+    const client = new EliClient();
+    const parser = new ActParser(client);
+
+    const meta = await client.getAct(eli.toString());
+    const units = await parser.parse(eli.toString(), meta.textHTML);
+
+    console.log(JSON.stringify({ eli: eli.toString(), units }, null, 2));
   });
 
 program
