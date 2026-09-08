@@ -1,0 +1,24 @@
+{
+  "name": "@lexdiff/cli",
+  "version": "0.1.0",
+  "description": "CLI for LexDiff",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "lexdiff": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@lexdiff/core": "workspace:*",
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.2"
+  }
+}
