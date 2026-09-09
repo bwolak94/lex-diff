@@ -12,4 +12,11 @@ export { EventHasher } from "./eventHasher.js";
 export { DiffEngine, SIMILARITY_THRESHOLD } from "./diffEngine.js";
 export type { DiffOptions } from "./diffEngine.js";
 export { apply } from "./apply.js";
-export type { ActRepository, UnitRepository, ChangeEventRepository } from "./repositories.js";
+export type {
+  ActRepository,
+  UnitRepository,
+  ChangeEventRepository,
+  SubscriptionRepository,
+  JobCursorRepository,
+  NotificationLogRepository,
+} from "./repositories.js";

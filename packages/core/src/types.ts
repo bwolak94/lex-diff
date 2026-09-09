@@ -143,3 +143,13 @@ export interface ActVersion {
   versionKind: ActVersionKind;
   publishedAt: string | null;
 }
+
+// ── Subscriptions ─────────────────────────────────────────────────────────────
+
+export interface Subscription {
+  id: string;
+  actEli: string;
+  email: string;
+  webhookUrl: string | null;
+  createdAt: string;
+}

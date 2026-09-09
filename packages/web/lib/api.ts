@@ -109,3 +109,44 @@ export function searchActs(query: {
   const qs = params.toString();
   return apiFetch<ActMetadata[]>(`/acts/search${qs ? `?${qs}` : ""}`);
 }
+
+// ── Subscriptions ─────────────────────────────────────────────────────────────
+
+export interface Subscription {
+  id: string;
+  actEli: string;
+  email: string;
+  webhookUrl: string | null;
+  createdAt: string;
+}
+
+export function fetchSubscriptions(): Promise<Subscription[]> {
+  return apiFetch<Subscription[]>("/subscriptions");
+}
+
+export async function createSubscription(body: {
+  actEli: string;
+  email: string;
+  webhookUrl: string | null;
+}): Promise<Subscription> {
+  const res = await fetch(`${API_BASE}/subscriptions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`API ${res.status}: ${text || res.statusText}`);
+  }
+  return res.json() as Promise<Subscription>;
+}
+
+export async function deleteSubscription(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/subscriptions/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok && res.status !== 204) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`API ${res.status}: ${text || res.statusText}`);
+  }
+}

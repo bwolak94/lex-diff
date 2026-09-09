@@ -5,6 +5,7 @@ import {
   InMemoryActRepository,
   InMemoryUnitRepository,
   InMemoryChangeEventRepository,
+  InMemorySubscriptionRepository,
 } from "@lexdiff/db";
 import type { ActMetadata } from "@lexdiff/core";
 
@@ -31,7 +32,8 @@ function makeRepos() {
   const acts = new InMemoryActRepository();
   const units = new InMemoryUnitRepository();
   const changeEvents = new InMemoryChangeEventRepository();
-  return { acts, units, changeEvents };
+  const subscriptions = new InMemorySubscriptionRepository();
+  return { acts, units, changeEvents, subscriptions };
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -228,6 +230,71 @@ describe("GET /acts/:eli/timeline", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ events: [] });
+  });
+});
+
+describe("POST /subscriptions", () => {
+  it("creates a subscription and returns 201", async () => {
+    const app = buildApp(makeRepos());
+    const res = await app.inject({
+      method: "POST",
+      url: "/subscriptions",
+      payload: { actEli: "DU/2024/1", email: "user@example.com", webhookUrl: null },
+    });
+    expect(res.statusCode).toBe(201);
+    const body = res.json() as { id: string; actEli: string; email: string };
+    expect(body.actEli).toBe("DU/2024/1");
+    expect(body.email).toBe("user@example.com");
+    expect(typeof body.id).toBe("string");
+  });
+
+  it("returns 400 on invalid email", async () => {
+    const app = buildApp(makeRepos());
+    const res = await app.inject({
+      method: "POST",
+      url: "/subscriptions",
+      payload: { actEli: "DU/2024/1", email: "not-an-email", webhookUrl: null },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});
+
+describe("GET /subscriptions", () => {
+  it("returns all subscriptions", async () => {
+    const repos = makeRepos();
+    await repos.subscriptions.save({ actEli: "DU/2024/1", email: "a@a.com", webhookUrl: null });
+    await repos.subscriptions.save({ actEli: "DU/2024/2", email: "b@b.com", webhookUrl: null });
+    const app = buildApp(repos);
+    const res = await app.inject({ method: "GET", url: "/subscriptions" });
+    expect(res.statusCode).toBe(200);
+    expect((res.json() as unknown[]).length).toBe(2);
+  });
+});
+
+describe("DELETE /subscriptions/:id", () => {
+  it("returns 404 for unknown id", async () => {
+    const app = buildApp(makeRepos());
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/subscriptions/00000000-0000-0000-0000-000000000000",
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("deletes existing subscription", async () => {
+    const repos = makeRepos();
+    const sub = await repos.subscriptions.save({
+      actEli: "DU/2024/1",
+      email: "user@example.com",
+      webhookUrl: null,
+    });
+    const app = buildApp(repos);
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/subscriptions/${sub.id}`,
+    });
+    expect(res.statusCode).toBe(204);
+    expect(await repos.subscriptions.findById(sub.id)).toBeNull();
   });
 });
 

@@ -13,6 +13,7 @@ import type {
   ActRepository,
   UnitRepository,
   ChangeEventRepository,
+  SubscriptionRepository,
 } from "@lexdiff/core";
 
 // ── Zod schemas for API responses ─────────────────────────────────────────────
@@ -70,10 +71,29 @@ const ErrorSchema = z.object({ error: z.string() });
 
 // ── App factory ───────────────────────────────────────────────────────────────
 
+const SubscriptionSchema = z.object({
+  id: z.string(),
+  actEli: z.string(),
+  email: z.string(),
+  webhookUrl: z.string().nullable(),
+  createdAt: z.string(),
+});
+
+const CreateSubscriptionBodySchema = z.object({
+  actEli: z.string().min(1),
+  email: z.string().email(),
+  webhookUrl: z.string().url().nullable().optional(),
+});
+
+const SubscriptionIdParamSchema = z.object({
+  id: z.string().uuid(),
+});
+
 export interface AppRepositories {
   acts: ActRepository;
   units: UnitRepository;
   changeEvents: ChangeEventRepository;
+  subscriptions: SubscriptionRepository;
 }
 
 export function buildApp(repos: AppRepositories) {
@@ -233,6 +253,61 @@ export function buildApp(repos: AppRepositories) {
       });
 
       return { events };
+    },
+  );
+
+  // ── POST /subscriptions ───────────────────────────────────────────────────────
+  typed.post(
+    "/subscriptions",
+    {
+      schema: {
+        body: CreateSubscriptionBodySchema,
+        response: {
+          201: SubscriptionSchema,
+          400: ErrorSchema,
+        },
+      },
+    },
+    async (req, rep) => {
+      const sub = await repos.subscriptions.save({
+        actEli: req.body.actEli,
+        email: req.body.email,
+        webhookUrl: req.body.webhookUrl ?? null,
+      });
+      return rep.code(201).send(sub);
+    },
+  );
+
+  // ── GET /subscriptions ────────────────────────────────────────────────────────
+  typed.get(
+    "/subscriptions",
+    {
+      schema: {
+        response: {
+          200: z.array(SubscriptionSchema),
+        },
+      },
+    },
+    async () => repos.subscriptions.findAll(),
+  );
+
+  // ── DELETE /subscriptions/:id ─────────────────────────────────────────────────
+  typed.delete(
+    "/subscriptions/:id",
+    {
+      schema: {
+        params: SubscriptionIdParamSchema,
+        response: {
+          204: z.object({}),
+          404: ErrorSchema,
+        },
+      },
+    },
+    async (req, rep) => {
+      const existing = await repos.subscriptions.findById(req.params.id);
+      if (!existing) return rep.code(404).send({ error: "Subscription not found" });
+      await repos.subscriptions.delete(req.params.id);
+      return rep.code(204).send({});
     },
   );
 

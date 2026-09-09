@@ -12,7 +12,7 @@ import { VacatioLegis } from "@/components/vacatio-legis";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Clock, GitCompare, ExternalLink } from "lucide-react";
+import { Clock, GitCompare, ExternalLink, Bell } from "lucide-react";
 
 function ActDetailSkeleton() {
   return (
@@ -135,6 +135,13 @@ export default function ActDetailPage({
                 >
                   <GitCompare size={16} className="mr-2" />
                   Diff Versions
+                </Link>
+                <Link
+                  href={`/subscriptions?actEli=${encodeURIComponent(eli)}`}
+                  className="inline-flex items-center rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                >
+                  <Bell size={16} className="mr-2" />
+                  Subscribe
                 </Link>
                 {act.textHTML && (
                   <a

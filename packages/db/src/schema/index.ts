@@ -72,3 +72,48 @@ export const changeEvents = pgTable(
   },
   (t) => [index("change_events_act_eli_idx").on(t.actEli)],
 );
+
+// ── Subscriptions (S5-7) ──────────────────────────────────────────────────────
+
+export const subscriptions = pgTable(
+  "subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actEli: text("act_eli").notNull(),
+    email: text("email").notNull(),
+    webhookUrl: text("webhook_url"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("subscriptions_eli_email_idx").on(t.actEli, t.email)],
+);
+
+// ── Job cursors (S5-2) ────────────────────────────────────────────────────────
+
+export const jobCursors = pgTable("job_cursors", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  jobType: text("job_type").notNull().unique(),
+  cursorValue: text("cursor_value").notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// ── Notification dedup log (S5-15) ────────────────────────────────────────────
+
+export const notificationLog = pgTable(
+  "notification_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    subscriptionId: uuid("subscription_id")
+      .notNull()
+      .references(() => subscriptions.id, { onDelete: "cascade" }),
+    eventHash: text("event_hash").notNull(),
+    channel: text("channel").notNull(), // email | webhook
+    sentAt: timestamp("sent_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("notification_log_dedup_idx").on(
+      t.subscriptionId,
+      t.eventHash,
+      t.channel,
+    ),
+  ],
+);

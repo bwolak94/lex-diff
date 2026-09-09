@@ -4,7 +4,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Scale, Search, Clock, GitCompare } from "lucide-react";
+import { Scale, Search, Clock, GitCompare, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function Header() {
@@ -29,6 +29,7 @@ function Header() {
 
 const navItems = [
   { href: "/acts/search", label: "Search", icon: Search },
+  { href: "/subscriptions", label: "Subscriptions", icon: Bell },
 ] as const;
 
 function Sidebar({ eli }: { eli?: string }) {
