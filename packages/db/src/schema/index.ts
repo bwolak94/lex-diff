@@ -73,13 +73,47 @@ export const changeEvents = pgTable(
   (t) => [index("change_events_act_eli_idx").on(t.actEli)],
 );
 
-// ── Subscriptions (S5-7) ──────────────────────────────────────────────────────
+// ── B-5: Users + auth ────────────────────────────────────────────────────────
+
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull().unique(),
+  plan: text("plan").notNull().default("free"), // free | pro
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const magicLinkTokens = pgTable("magic_link_tokens", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+});
+
+export const sessions = pgTable("sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ── Subscriptions (S5-7 + B-1 extended) ──────────────────────────────────────
 
 export const subscriptions = pgTable(
   "subscriptions",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    actEli: text("act_eli").notNull(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    // B-1: subscription type — act | keyword | publisher
+    subscriptionType: text("subscription_type").notNull().default("act"),
+    actEli: text("act_eli").notNull().default(""),
+    keyword: text("keyword"),
+    publisherFilter: text("publisher_filter"),
     email: text("email").notNull(),
     webhookUrl: text("webhook_url"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -95,6 +129,28 @@ export const jobCursors = pgTable("job_cursors", {
   cursorValue: text("cursor_value").notNull(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+// ── B-2: Act references graph ─────────────────────────────────────────────────
+
+export const actReferences = pgTable(
+  "act_references",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sourceEli: text("source_eli").notNull(),
+    targetEli: text("target_eli").notNull(),
+    referenceType: text("reference_type").notNull(), // amends | repeals | implements | extends
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("act_references_pair_idx").on(
+      t.sourceEli,
+      t.targetEli,
+      t.referenceType,
+    ),
+    index("act_references_source_idx").on(t.sourceEli),
+    index("act_references_target_idx").on(t.targetEli),
+  ],
+);
 
 // ── Notification dedup log (S5-15) ────────────────────────────────────────────
 

@@ -144,12 +144,41 @@ export interface ActVersion {
   publishedAt: string | null;
 }
 
-// ── Subscriptions ─────────────────────────────────────────────────────────────
+// ── Subscriptions (B-1 extended) ──────────────────────────────────────────────
+
+export type SubscriptionType = "act" | "keyword" | "publisher";
 
 export interface Subscription {
   id: string;
+  userId: string | null;
+  subscriptionType: SubscriptionType;
   actEli: string;
+  keyword: string | null;
+  publisherFilter: string | null;
   email: string;
   webhookUrl: string | null;
+  createdAt: string;
+}
+
+// ── B-2: Act references ───────────────────────────────────────────────────────
+
+export type ReferenceType = "amends" | "repeals" | "implements" | "extends";
+
+export interface ActReference {
+  id: string;
+  sourceEli: string;
+  targetEli: string;
+  referenceType: ReferenceType;
+  createdAt: string;
+}
+
+// ── B-5: Users + auth ─────────────────────────────────────────────────────────
+
+export type UserPlan = "free" | "pro";
+
+export interface User {
+  id: string;
+  email: string;
+  plan: UserPlan;
   createdAt: string;
 }

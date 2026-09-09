@@ -6,12 +6,16 @@ import type {
   Unit,
   ChangeEvent,
   Subscription,
+  ActReference,
+  User,
   ActRepository,
   UnitRepository,
   ChangeEventRepository,
   SubscriptionRepository,
   JobCursorRepository,
   NotificationLogRepository,
+  ActReferenceRepository,
+  UserRepository,
 } from "@lexdiff/core";
 
 export class InMemoryActRepository implements ActRepository {
@@ -98,34 +102,70 @@ export class InMemorySubscriptionRepository
   private readonly _subs = new Map<string, Subscription>();
 
   async findByActEli(actEli: string): Promise<Subscription[]> {
-    return Array.from(this._subs.values()).filter((s) => s.actEli === actEli);
+    return Array.from(this._subs.values()).filter(
+      (s) => s.actEli === actEli && s.subscriptionType === "act",
+    );
+  }
+
+  async findByKeyword(keyword: string): Promise<Subscription[]> {
+    return Array.from(this._subs.values()).filter(
+      (s) => s.keyword === keyword && s.subscriptionType === "keyword",
+    );
+  }
+
+  async findByPublisher(publisher: string): Promise<Subscription[]> {
+    return Array.from(this._subs.values()).filter(
+      (s) => s.publisherFilter === publisher && s.subscriptionType === "publisher",
+    );
   }
 
   async findAll(): Promise<Subscription[]> {
     return Array.from(this._subs.values());
   }
 
+  async findByUserId(userId: string): Promise<Subscription[]> {
+    return Array.from(this._subs.values()).filter((s) => s.userId === userId);
+  }
+
   async findById(id: string): Promise<Subscription | null> {
     return this._subs.get(id) ?? null;
   }
 
+  async countByUserId(userId: string): Promise<number> {
+    return Array.from(this._subs.values()).filter((s) => s.userId === userId).length;
+  }
+
   async save(sub: {
-    actEli: string;
+    userId?: string | null;
+    subscriptionType?: "act" | "keyword" | "publisher";
+    actEli?: string;
+    keyword?: string | null;
+    publisherFilter?: string | null;
     email: string;
     webhookUrl: string | null;
   }): Promise<Subscription> {
-    // upsert on (actEli, email)
+    const type = sub.subscriptionType ?? "act";
+    const actEli = sub.actEli ?? "";
     const existing = Array.from(this._subs.values()).find(
-      (s) => s.actEli === sub.actEli && s.email === sub.email,
+      (s) => s.actEli === actEli && s.email === sub.email,
     );
     if (existing) {
-      const updated: Subscription = { ...existing, webhookUrl: sub.webhookUrl };
+      const updated: Subscription = {
+        ...existing,
+        webhookUrl: sub.webhookUrl,
+        keyword: sub.keyword ?? null,
+        publisherFilter: sub.publisherFilter ?? null,
+      };
       this._subs.set(existing.id, updated);
       return updated;
     }
     const created: Subscription = {
       id: randomUUID(),
-      actEli: sub.actEli,
+      userId: sub.userId ?? null,
+      subscriptionType: type,
+      actEli,
+      keyword: sub.keyword ?? null,
+      publisherFilter: sub.publisherFilter ?? null,
       email: sub.email,
       webhookUrl: sub.webhookUrl,
       createdAt: new Date().toISOString(),
@@ -136,6 +176,66 @@ export class InMemorySubscriptionRepository
 
   async delete(id: string): Promise<void> {
     this._subs.delete(id);
+  }
+}
+
+export class InMemoryActReferenceRepository implements ActReferenceRepository {
+  private readonly _refs: ActReference[] = [];
+
+  async findBySourceEli(sourceEli: string): Promise<ActReference[]> {
+    return this._refs.filter((r) => r.sourceEli === sourceEli);
+  }
+
+  async findByTargetEli(targetEli: string): Promise<ActReference[]> {
+    return this._refs.filter((r) => r.targetEli === targetEli);
+  }
+
+  async saveAll(refs: Omit<ActReference, "id" | "createdAt">[]): Promise<void> {
+    for (const ref of refs) {
+      const dup = this._refs.find(
+        (r) =>
+          r.sourceEli === ref.sourceEli &&
+          r.targetEli === ref.targetEli &&
+          r.referenceType === ref.referenceType,
+      );
+      if (!dup) {
+        this._refs.push({
+          ...ref,
+          id: randomUUID(),
+          createdAt: new Date().toISOString(),
+        });
+      }
+    }
+  }
+}
+
+export class InMemoryUserRepository implements UserRepository {
+  private readonly _users = new Map<string, User>();
+
+  async findByEmail(email: string): Promise<User | null> {
+    return Array.from(this._users.values()).find((u) => u.email === email) ?? null;
+  }
+
+  async findById(id: string): Promise<User | null> {
+    return this._users.get(id) ?? null;
+  }
+
+  async upsert(email: string): Promise<User> {
+    const existing = await this.findByEmail(email);
+    if (existing) return existing;
+    const user: User = {
+      id: randomUUID(),
+      email,
+      plan: "free",
+      createdAt: new Date().toISOString(),
+    };
+    this._users.set(user.id, user);
+    return user;
+  }
+
+  async updatePlan(id: string, plan: "free" | "pro"): Promise<void> {
+    const user = this._users.get(id);
+    if (user) this._users.set(id, { ...user, plan });
   }
 }
 

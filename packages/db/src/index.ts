@@ -15,6 +15,8 @@ export { DrizzleChangeEventRepository } from "./repositories/changeEvent.js";
 export { DrizzleSubscriptionRepository } from "./repositories/subscription.js";
 export { DrizzleJobCursorRepository } from "./repositories/cursor.js";
 export { DrizzleNotificationLogRepository } from "./repositories/notificationLog.js";
+export { DrizzleActReferenceRepository } from "./repositories/reference.js";
+export { DrizzleUserRepository } from "./repositories/user.js";
 export {
   InMemoryActRepository,
   InMemoryUnitRepository,
@@ -22,4 +24,6 @@ export {
   InMemorySubscriptionRepository,
   InMemoryJobCursorRepository,
   InMemoryNotificationLogRepository,
+  InMemoryActReferenceRepository,
+  InMemoryUserRepository,
 } from "./repositories/inMemory.js";
