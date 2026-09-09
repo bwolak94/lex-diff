@@ -1,7 +1,7 @@
 // B-2: References page — shows outgoing and incoming act references.
 
-import { fetchReferences } from "../../../../lib/api.js";
-import type { ActReference } from "../../../../lib/api.js";
+import { fetchReferences } from "@/lib/api";
+import type { ActReference } from "@/lib/api";
 
 interface Props {
   params: Promise<{ eli: string }>;

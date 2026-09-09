@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { verifyMagicLinkToken } from "../../../lib/api.js";
+import { verifyMagicLinkToken } from "@/lib/api";
 
 const SESSION_KEY = "lexdiff_session";
 

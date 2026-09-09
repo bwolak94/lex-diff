@@ -5,7 +5,7 @@
 // Step 2: User clicks link → /auth/callback?token=… stores session → redirects home
 
 import { useState } from "react";
-import { sendMagicLink } from "../../lib/api.js";
+import { sendMagicLink } from "@/lib/api";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");

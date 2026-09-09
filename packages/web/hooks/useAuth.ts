@@ -4,8 +4,8 @@
 // Reads/writes the session token from localStorage and fetches /auth/me.
 
 import { useState, useEffect, useCallback } from "react";
-import { getMe, logout as apiLogout } from "../lib/api.js";
-import type { User } from "../lib/api.js";
+import { getMe, logout as apiLogout } from "@/lib/api";
+import type { User } from "@/lib/api";
 
 const SESSION_KEY = "lexdiff_session";
 
