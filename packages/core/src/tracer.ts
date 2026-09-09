@@ -26,7 +26,7 @@ export async function withSpan<T>(
   attributes?: Record<string, string | number | boolean>,
 ): Promise<T> {
   const tracer = getTracer();
-  const span = tracer.startSpan(name, { attributes });
+  const span = tracer.startSpan(name, attributes ? { attributes } : {});
   return context.with(trace.setSpan(context.active(), span), async () => {
     try {
       const result = await fn(span);
@@ -51,7 +51,7 @@ export function withSpanSync<T>(
   attributes?: Record<string, string | number | boolean>,
 ): T {
   const tracer = getTracer();
-  const span = tracer.startSpan(name, { attributes });
+  const span = tracer.startSpan(name, attributes ? { attributes } : {});
   try {
     const result = fn(span);
     span.setStatus({ code: SpanStatusCode.OK });
