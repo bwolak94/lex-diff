@@ -15,7 +15,10 @@ import type {
   UnitRepository,
   ChangeEventRepository,
   SubscriptionRepository,
+  ActReferenceRepository,
+  UserRepository,
 } from "@lexdiff/core";
+import { generateTimelinePdf } from "./pdf.js";
 
 // ── Zod schemas for API responses ─────────────────────────────────────────────
 
@@ -90,11 +93,28 @@ const SubscriptionIdParamSchema = z.object({
   id: z.string().uuid(),
 });
 
+const ActReferenceSchema = z.object({
+  id: z.string(),
+  sourceEli: z.string(),
+  targetEli: z.string(),
+  referenceType: z.enum(["amends", "repeals", "implements", "extends"]),
+  createdAt: z.string(),
+});
+
+const UserSchema = z.object({
+  id: z.string(),
+  email: z.string(),
+  plan: z.enum(["free", "pro"]),
+  createdAt: z.string(),
+});
+
 export interface AppRepositories {
   acts: ActRepository;
   units: UnitRepository;
   changeEvents: ChangeEventRepository;
   subscriptions: SubscriptionRepository;
+  references: ActReferenceRepository;
+  users: UserRepository;
 }
 
 export function buildApp(repos: AppRepositories) {
@@ -260,6 +280,95 @@ export function buildApp(repos: AppRepositories) {
       });
 
       return { events };
+    },
+  );
+
+  // ── B-2: GET /acts/:eli/references ───────────────────────────────────────────
+  typed.get(
+    "/acts/:eli/references",
+    {
+      schema: {
+        params: EliParamSchema,
+        response: {
+          200: z.object({
+            outgoing: z.array(ActReferenceSchema),
+            incoming: z.array(ActReferenceSchema),
+          }),
+        },
+      },
+    },
+    async (req) => {
+      const internalEli = req.params.eli.replace(/:/g, "/");
+      const [outgoing, incoming] = await Promise.all([
+        repos.references.findBySourceEli(internalEli),
+        repos.references.findByTargetEli(internalEli),
+      ]);
+      return { outgoing, incoming };
+    },
+  );
+
+  // ── B-3: GET /acts/:eli/timeline.pdf ─────────────────────────────────────────
+  app.get<{ Params: { eli: string } }>(
+    "/acts/:eli/timeline.pdf",
+    async (req, rep) => {
+      const internalEli = req.params.eli.replace(/:/g, "/");
+      const events = await repos.changeEvents.findByActEli(internalEli);
+      events.sort((a, b) => {
+        if (!a.effectiveDate) return 1;
+        if (!b.effectiveDate) return -1;
+        return a.effectiveDate < b.effectiveDate ? -1 : 1;
+      });
+      const pdf = generateTimelinePdf(internalEli, events);
+      rep.header("Content-Type", "application/pdf");
+      rep.header(
+        "Content-Disposition",
+        `attachment; filename="lexdiff-${internalEli.replace(/\//g, "-")}.pdf"`,
+      );
+      return rep.send(pdf);
+    },
+  );
+
+  // ── B-1: GET /subscriptions/by-keyword/:keyword ───────────────────────────────
+  typed.get(
+    "/subscriptions/by-keyword/:keyword",
+    {
+      schema: {
+        params: z.object({ keyword: z.string().min(1) }),
+        response: { 200: z.array(SubscriptionSchema) },
+      },
+    },
+    async (req) => repos.subscriptions.findByKeyword(req.params.keyword),
+  );
+
+  // ── B-1: GET /subscriptions/by-publisher/:publisher ───────────────────────────
+  typed.get(
+    "/subscriptions/by-publisher/:publisher",
+    {
+      schema: {
+        params: z.object({ publisher: z.string().min(1) }),
+        response: { 200: z.array(SubscriptionSchema) },
+      },
+    },
+    async (req) => repos.subscriptions.findByPublisher(req.params.publisher),
+  );
+
+  // ── B-5: GET /auth/me ─────────────────────────────────────────────────────────
+  typed.get(
+    "/auth/me",
+    {
+      schema: {
+        response: { 200: UserSchema, 401: ErrorSchema },
+      },
+    },
+    async (req, rep) => {
+      const token = req.headers.authorization?.replace("Bearer ", "");
+      if (!token) return rep.code(401).send({ error: "Unauthorized" });
+      // Session lookup delegated to caller (requires AuthService wiring in server.ts)
+      const userId = (req as unknown as { lexdiffUserId?: string }).lexdiffUserId;
+      if (!userId) return rep.code(401).send({ error: "Unauthorized" });
+      const user = await repos.users.findById(userId);
+      if (!user) return rep.code(401).send({ error: "User not found" });
+      return user;
     },
   );
 

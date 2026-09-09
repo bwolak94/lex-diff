@@ -13,6 +13,8 @@ export { DiffEngine, SIMILARITY_THRESHOLD } from "./diffEngine.js";
 export type { DiffOptions } from "./diffEngine.js";
 export { apply } from "./apply.js";
 export { withSpan, withSpanSync, getTracer } from "./tracer.js";
+export { extractPdfText } from "./pdfExtractor.js";
+export type { PdfTextResult } from "./pdfExtractor.js";
 export type {
   ActRepository,
   UnitRepository,
@@ -20,4 +22,6 @@ export type {
   SubscriptionRepository,
   JobCursorRepository,
   NotificationLogRepository,
+  ActReferenceRepository,
+  UserRepository,
 } from "./repositories.js";

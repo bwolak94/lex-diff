@@ -5,8 +5,9 @@
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
-import { Resource } from "@opentelemetry/resources";
-import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
+
+// Service name is read from OTEL_SERVICE_NAME env var by NodeSDK automatically.
+// Set OTEL_SERVICE_NAME=lexdiff-api in your environment / docker-compose.
 
 const exporter = new OTLPTraceExporter({
   url:
@@ -15,7 +16,6 @@ const exporter = new OTLPTraceExporter({
 });
 
 const sdk = new NodeSDK({
-  resource: new Resource({ [ATTR_SERVICE_NAME]: "lexdiff-api" }),
   traceExporter: exporter,
   instrumentations: [
     getNodeAutoInstrumentations({

@@ -6,6 +6,8 @@ import {
   InMemoryUnitRepository,
   InMemoryChangeEventRepository,
   InMemorySubscriptionRepository,
+  InMemoryActReferenceRepository,
+  InMemoryUserRepository,
 } from "@lexdiff/db";
 import type { ActMetadata } from "@lexdiff/core";
 
@@ -33,7 +35,9 @@ function makeRepos() {
   const units = new InMemoryUnitRepository();
   const changeEvents = new InMemoryChangeEventRepository();
   const subscriptions = new InMemorySubscriptionRepository();
-  return { acts, units, changeEvents, subscriptions };
+  const references = new InMemoryActReferenceRepository();
+  const users = new InMemoryUserRepository();
+  return { acts, units, changeEvents, subscriptions, references, users };
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

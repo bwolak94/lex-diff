@@ -150,3 +150,68 @@ export async function deleteSubscription(id: string): Promise<void> {
     throw new Error(`API ${res.status}: ${text || res.statusText}`);
   }
 }
+
+// ── References (B-2) ──────────────────────────────────────────────────────────
+
+export type ReferenceType = "amends" | "repeals" | "implements" | "extends";
+
+export interface ActReference {
+  id: string;
+  sourceEli: string;
+  targetEli: string;
+  referenceType: ReferenceType;
+  createdAt: string;
+}
+
+export function fetchReferences(eli: string): Promise<{
+  outgoing: ActReference[];
+  incoming: ActReference[];
+}> {
+  return apiFetch(`/acts/${encodeURIComponent(eli)}/references`);
+}
+
+// ── Auth (B-5) ────────────────────────────────────────────────────────────────
+
+export interface User {
+  id: string;
+  email: string;
+  plan: "free" | "pro";
+  createdAt: string;
+}
+
+async function apiMutate<T>(
+  path: string,
+  method: string,
+  body?: unknown,
+  token?: string,
+): Promise<T> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`API ${res.status}: ${text || res.statusText}`);
+  }
+  if (res.status === 204) return undefined as T;
+  return res.json() as Promise<T>;
+}
+
+export function sendMagicLink(email: string): Promise<{ message: string }> {
+  return apiMutate("/auth/magic-link", "POST", { email });
+}
+
+export function verifyMagicLinkToken(token: string): Promise<{ sessionToken: string }> {
+  return apiFetch(`/auth/verify?token=${encodeURIComponent(token)}`);
+}
+
+export function getMe(sessionToken: string): Promise<User> {
+  return apiMutate<User>("/auth/me", "GET", undefined, sessionToken);
+}
+
+export function logout(sessionToken: string): Promise<void> {
+  return apiMutate("/auth/session", "DELETE", undefined, sessionToken);
+}
