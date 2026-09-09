@@ -1,0 +1,18 @@
+groups:
+  - name: lexdiff
+    rules:
+      # S6-6: Fire when p95 unmatchedRatio exceeds the 0.05 threshold
+      - alert: HighUnmatchedRatio
+        expr: |
+          histogram_quantile(0.95,
+            rate(lexdiff_diff_unmatched_ratio_bucket[10m])
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DiffEngine unmatchedRatio p95 above threshold"
+          description: >
+            p95 of lexdiff_diff_unmatched_ratio is {{ $value | humanizePercentage }}
+            over the last 10 minutes. Threshold: 5 %.
+            This may indicate a structural change in the ELI API or an alignment bug.

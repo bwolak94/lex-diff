@@ -1,7 +1,20 @@
 import { diff_match_patch } from "diff-match-patch";
+import { metrics } from "@opentelemetry/api";
 import type { Unit, ChangeEvent, WordDiffOp } from "./types.js";
 import { SimilarityScorer } from "./similarityScorer.js";
 import { EventHasher } from "./eventHasher.js";
+import { withSpanSync } from "./tracer.js";
+
+// S6-4: unmatchedRatio histogram — fires in Grafana alert at 0.05
+const meter = metrics.getMeter("@lexdiff/core", "0.1.0");
+const unmatchedRatioHistogram = meter.createHistogram(
+  "lexdiff.diff.unmatchedRatio",
+  {
+    description:
+      "Fraction of old units with no match after DiffEngine run (0–1). Alert threshold: 0.05.",
+    unit: "ratio",
+  },
+);
 
 // S2-4 — threshold from PRD: ≥ 0.7 → UnitRenumbered, < 0.7 → separate events
 export const SIMILARITY_THRESHOLD = 0.7;
@@ -49,97 +62,123 @@ export class DiffEngine {
   private readonly hasher = new EventHasher();
 
   diff(oldUnits: Unit[], newUnits: Unit[], options: DiffOptions): ChangeEvent[] {
-    // ── S2-5: ActConsolidated guard ──────────────────────────────────────────
-    if (options.isConsolidated) {
-      const tjEli = options.consolidatedEli ?? options.actEli;
-      return [
-        {
-          type: "ActConsolidated",
-          tjEli,
-          eventHash: this.hasher.hash(options.actEli, "ActConsolidated", { tjEli }),
-          severity: "high",
-          effectiveDate: options.effectiveDate,
-        },
-      ];
-    }
+    return withSpanSync(
+      "DiffEngine.diff",
+      (span) => {
+        span.setAttribute("actEli", options.actEli);
+        span.setAttribute("oldUnits.count", oldUnits.length);
+        span.setAttribute("newUnits.count", newUnits.length);
 
-    // ── S2-2: matchByPath ────────────────────────────────────────────────────
-    const pathMatch = this.matchByPath(oldUnits, newUnits);
+        // ── S2-5: ActConsolidated guard ──────────────────────────────────────
+        if (options.isConsolidated) {
+          const tjEli = options.consolidatedEli ?? options.actEli;
+          span.setAttribute("consolidated", true);
+          return [
+            {
+              type: "ActConsolidated",
+              tjEli,
+              eventHash: this.hasher.hash(options.actEli, "ActConsolidated", {
+                tjEli,
+              }),
+              severity: "high",
+              effectiveDate: options.effectiveDate,
+            },
+          ];
+        }
 
-    // ── S2-3: matchBySimilarity ──────────────────────────────────────────────
-    const simMatch = this.matchBySimilarity(
-      pathMatch.unmatchedOld,
-      pathMatch.unmatchedNew,
-    );
+        // ── S2-2: matchByPath ────────────────────────────────────────────────
+        const pathMatch = this.matchByPath(oldUnits, newUnits);
 
-    const events: ChangeEvent[] = [];
+        // ── S2-3: matchBySimilarity ──────────────────────────────────────────
+        const simMatch = this.matchBySimilarity(
+          pathMatch.unmatchedOld,
+          pathMatch.unmatchedNew,
+        );
 
-    // Path-matched pairs: emit UnitAmended when text changed
-    for (const { old: o, new: n } of pathMatch.matched) {
-      if (o.textHash !== n.textHash && (o.text !== null || n.text !== null)) {
-        const before = o.text ?? "";
-        const after = n.text ?? "";
-        events.push({
-          type: "UnitAmended",
-          path: o.path,
-          before,
-          after,
-          // S2-4: word-level diff via diff-match-patch
-          wordDiff: computeWordDiff(before, after),
-          eventHash: this.hasher.hash(options.actEli, "UnitAmended", {
-            path: o.path,
-            beforeHash: o.textHash ?? "",
-            afterHash: n.textHash ?? "",
-          }),
-          severity: "medium",
-          effectiveDate: options.effectiveDate,
+        // S6-4: Record unmatchedRatio metric
+        const unmatchedRatio =
+          oldUnits.length > 0
+            ? simMatch.finalUnmatchedOld.length / oldUnits.length
+            : 0;
+        unmatchedRatioHistogram.record(unmatchedRatio, {
+          "actEli": options.actEli,
         });
-      }
-    }
+        span.setAttribute("diff.unmatchedRatio", unmatchedRatio);
+        span.setAttribute(
+          "diff.finalUnmatchedOld",
+          simMatch.finalUnmatchedOld.length,
+        );
 
-    // Similarity-matched pairs: emit UnitRenumbered
-    for (const { old: o, new: n } of simMatch.renumbered) {
-      events.push({
-        type: "UnitRenumbered",
-        fromPath: o.path,
-        toPath: n.path,
-        eventHash: this.hasher.hash(options.actEli, "UnitRenumbered", {
-          fromPath: o.path,
-          toPath: n.path,
-        }),
-        severity: "low",
-        effectiveDate: options.effectiveDate,
-      });
-    }
+        const events: ChangeEvent[] = [];
 
-    // Truly unmatched old units → UnitRepealed
-    for (const u of simMatch.finalUnmatchedOld) {
-      events.push({
-        type: "UnitRepealed",
-        path: u.path,
-        eventHash: this.hasher.hash(options.actEli, "UnitRepealed", {
-          path: u.path,
-        }),
-        severity: "high",
-        effectiveDate: options.effectiveDate,
-      });
-    }
+        // Path-matched pairs: emit UnitAmended when text changed
+        for (const { old: o, new: n } of pathMatch.matched) {
+          if (o.textHash !== n.textHash && (o.text !== null || n.text !== null)) {
+            const before = o.text ?? "";
+            const after = n.text ?? "";
+            events.push({
+              type: "UnitAmended",
+              path: o.path,
+              before,
+              after,
+              wordDiff: computeWordDiff(before, after),
+              eventHash: this.hasher.hash(options.actEli, "UnitAmended", {
+                path: o.path,
+                beforeHash: o.textHash ?? "",
+                afterHash: n.textHash ?? "",
+              }),
+              severity: "medium",
+              effectiveDate: options.effectiveDate,
+            });
+          }
+        }
 
-    // Truly unmatched new units → UnitAdded
-    for (const u of simMatch.finalUnmatchedNew) {
-      events.push({
-        type: "UnitAdded",
-        path: u.path,
-        text: u.text ?? "",
-        eventHash: this.hasher.hash(options.actEli, "UnitAdded", {
-          path: u.path,
-        }),
-        severity: "medium",
-        effectiveDate: options.effectiveDate,
-      });
-    }
+        // Similarity-matched pairs: emit UnitRenumbered
+        for (const { old: o, new: n } of simMatch.renumbered) {
+          events.push({
+            type: "UnitRenumbered",
+            fromPath: o.path,
+            toPath: n.path,
+            eventHash: this.hasher.hash(options.actEli, "UnitRenumbered", {
+              fromPath: o.path,
+              toPath: n.path,
+            }),
+            severity: "low",
+            effectiveDate: options.effectiveDate,
+          });
+        }
 
-    return events;
+        // Truly unmatched old units → UnitRepealed
+        for (const u of simMatch.finalUnmatchedOld) {
+          events.push({
+            type: "UnitRepealed",
+            path: u.path,
+            eventHash: this.hasher.hash(options.actEli, "UnitRepealed", {
+              path: u.path,
+            }),
+            severity: "high",
+            effectiveDate: options.effectiveDate,
+          });
+        }
+
+        // Truly unmatched new units → UnitAdded
+        for (const u of simMatch.finalUnmatchedNew) {
+          events.push({
+            type: "UnitAdded",
+            path: u.path,
+            text: u.text ?? "",
+            eventHash: this.hasher.hash(options.actEli, "UnitAdded", {
+              path: u.path,
+            }),
+            severity: "medium",
+            effectiveDate: options.effectiveDate,
+          });
+        }
+
+        span.setAttribute("events.count", events.length);
+        return events;
+      },
+    );
   }
 
   // ── S2-2: O(n) exact path matching ────────────────────────────────────────

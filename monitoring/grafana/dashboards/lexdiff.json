@@ -1,0 +1,91 @@
+{
+  "title": "LexDiff",
+  "uid": "lexdiff-main",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Diff unmatchedRatio p50 / p95 / p99",
+      "description": "S6-6: Alert fires when p95 exceeds 0.05",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(lexdiff_diff_unmatched_ratio_bucket[5m]))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(lexdiff_diff_unmatched_ratio_bucket[5m]))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(lexdiff_diff_unmatched_ratio_bucket[5m]))",
+          "legendFormat": "p99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "value": 0, "color": "green" },
+              { "value": 0.05, "color": "orange" },
+              { "value": 0.1, "color": "red" }
+            ]
+          },
+          "unit": "percentunit"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Diff runs (rate/5m)",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "rate(lexdiff_diff_unmatched_ratio_count[5m])",
+          "legendFormat": "runs/s"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "API request rate",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "rate(http_request_duration_seconds_count[5m])",
+          "legendFormat": "req/s"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Node.js heap used",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "nodejs_heap_size_used_bytes",
+          "legendFormat": "heap used"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes" } }
+    },
+    {
+      "id": 5,
+      "type": "logs",
+      "title": "API logs (Loki)",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 12 },
+      "targets": [
+        {
+          "expr": "{job=\"lexdiff-api\"}",
+          "datasource": "Loki"
+        }
+      ]
+    }
+  ]
+}

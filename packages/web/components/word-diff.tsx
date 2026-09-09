@@ -1,8 +1,15 @@
 // S4-10: Word-level diff highlighting
+// S6-12: Color-blind safe — underline + strikethrough in addition to color
+// S6-13: Memoized to avoid re-rendering on parent state changes
 
+import { memo } from "react";
 import type { WordDiffOp } from "@/lib/api";
 
-export function WordDiff({ ops }: { ops: WordDiffOp[] }) {
+interface WordDiffProps {
+  ops: WordDiffOp[];
+}
+
+function WordDiffInner({ ops }: WordDiffProps) {
   return (
     <span>
       {ops.map((op, i) => {
@@ -11,19 +18,21 @@ export function WordDiff({ ops }: { ops: WordDiffOp[] }) {
         }
         if (op.type === "insert") {
           return (
-            <mark
+            <ins
               key={i}
-              className="rounded bg-green-200 px-0.5 text-green-900 not-italic"
+              aria-label={`inserted: ${op.text}`}
+              className="rounded bg-green-200 px-0.5 text-green-900 underline decoration-green-700 decoration-2 not-italic"
             >
               {op.text}
-            </mark>
+            </ins>
           );
         }
-        // delete
+        // delete — strikethrough + background (color-blind safe: not color alone)
         return (
           <del
             key={i}
-            className="rounded bg-red-200 px-0.5 text-red-900 line-through"
+            aria-label={`deleted: ${op.text}`}
+            className="rounded bg-red-200 px-0.5 text-red-900 line-through decoration-red-700 decoration-2"
           >
             {op.text}
           </del>
@@ -32,3 +41,6 @@ export function WordDiff({ ops }: { ops: WordDiffOp[] }) {
     </span>
   );
 }
+
+// S6-13: Memoize — ops array identity triggers re-render only when content changes
+export const WordDiff = memo(WordDiffInner);

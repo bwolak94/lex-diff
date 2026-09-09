@@ -1,3 +1,6 @@
+// S6-1: Must be imported first — initialises OTel SDK before any other module.
+import "./telemetry.js";
+
 import { buildApp } from "./index.js";
 import {
   db,
