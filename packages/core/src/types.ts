@@ -134,3 +134,12 @@ export type ChangeEvent =
   | EntryIntoForceSetEvent;
 
 export type ChangeEventType = ChangeEvent["type"];
+
+// ── Act versions ─────────────────────────────────────────────────────────────
+
+export interface ActVersion {
+  eli: string;
+  actEli: string;
+  versionKind: ActVersionKind;
+  publishedAt: string | null;
+}

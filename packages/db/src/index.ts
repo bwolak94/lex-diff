@@ -8,3 +8,12 @@ const pool = new Pool({
 
 export const db = drizzle(pool, { schema });
 export { schema };
+
+export { DrizzleActRepository } from "./repositories/act.js";
+export { DrizzleUnitRepository } from "./repositories/unit.js";
+export { DrizzleChangeEventRepository } from "./repositories/changeEvent.js";
+export {
+  InMemoryActRepository,
+  InMemoryUnitRepository,
+  InMemoryChangeEventRepository,
+} from "./repositories/inMemory.js";
