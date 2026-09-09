@@ -4,6 +4,8 @@ import "./telemetry.js";
 import { buildApp } from "./index.js";
 import {
   db,
+  schema,
+  eq,
   DrizzleActRepository,
   DrizzleUnitRepository,
   DrizzleChangeEventRepository,
@@ -59,13 +61,9 @@ if (resendApiKey) {
     {
       upsertUser: async (email) => userRepo.upsert(email),
       createMagicToken: async (userId, token, expiresAt) => {
-        await db.insert(
-          (await import("@lexdiff/db")).schema.magicLinkTokens,
-        ).values({ userId, token, expiresAt });
+        await db.insert(schema.magicLinkTokens).values({ userId, token, expiresAt });
       },
       findMagicToken: async (token) => {
-        const { schema } = await import("@lexdiff/db");
-        const { eq } = await import("drizzle-orm");
         const [row] = await db
           .select()
           .from(schema.magicLinkTokens)
@@ -75,20 +73,15 @@ if (resendApiKey) {
         return { userId: row.userId, expiresAt: row.expiresAt, usedAt: row.usedAt };
       },
       markMagicTokenUsed: async (token) => {
-        const { schema } = await import("@lexdiff/db");
-        const { eq } = await import("drizzle-orm");
         await db
           .update(schema.magicLinkTokens)
           .set({ usedAt: new Date() })
           .where(eq(schema.magicLinkTokens.token, token));
       },
       createSession: async (userId, token, expiresAt) => {
-        const { schema } = await import("@lexdiff/db");
         await db.insert(schema.sessions).values({ userId, token, expiresAt });
       },
       findSession: async (token) => {
-        const { schema } = await import("@lexdiff/db");
-        const { eq } = await import("drizzle-orm");
         const [row] = await db
           .select()
           .from(schema.sessions)
@@ -98,8 +91,6 @@ if (resendApiKey) {
         return { userId: row.userId, expiresAt: row.expiresAt };
       },
       deleteSession: async (token) => {
-        const { schema } = await import("@lexdiff/db");
-        const { eq } = await import("drizzle-orm");
         await db.delete(schema.sessions).where(eq(schema.sessions.token, token));
       },
     },

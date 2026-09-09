@@ -22,7 +22,7 @@ export class BillingService {
     private readonly proPriceId: string,
     private readonly webhookSecret: string,
   ) {
-    this.stripe = new Stripe(stripeSecretKey, { apiVersion: "2025-01-27.acacia" });
+    this.stripe = new Stripe(stripeSecretKey, { apiVersion: "2025-02-24.acacia" });
   }
 
   /** Create a Stripe Checkout session to upgrade to Pro. */
