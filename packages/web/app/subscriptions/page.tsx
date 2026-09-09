@@ -2,7 +2,7 @@
 
 // S5-17/S5-18: Subscription management page
 
-import { useState, useEffect } from "react";
+import { Suspense, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { Trash2, Bell } from "lucide-react";
@@ -53,7 +53,7 @@ function SubscriptionRow({
   );
 }
 
-export default function SubscriptionsPage() {
+function SubscriptionsContent() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
 
@@ -180,5 +180,13 @@ export default function SubscriptionsPage() {
         </div>
       </div>
     </AppLayout>
+  );
+}
+
+export default function SubscriptionsPage() {
+  return (
+    <Suspense>
+      <SubscriptionsContent />
+    </Suspense>
   );
 }
