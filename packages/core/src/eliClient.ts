@@ -5,10 +5,16 @@ import {
   EliChangedActsResponseSchema,
   type EliActStructResponse,
 } from "./schemas.js";
+import { withSpan } from "./tracer.js";
 
 export interface EliClientOptions {
   /** API base URL. Default: https://api.sejm.gov.pl/eli */
   baseUrl?: string;
+  /**
+   * S6-7: Rate limit — max requests per second to the ELI API.
+   * Default: 10 req/s. Set to 0 to disable throttling.
+   */
+  requestsPerSecond?: number;
 }
 
 export class EliClientError extends Error {
@@ -21,24 +27,51 @@ export class EliClientError extends Error {
   }
 }
 
+// ── S6-7: Token-bucket rate limiter ──────────────────────────────────────────
+
+class RateLimiter {
+  private readonly minIntervalMs: number;
+  private lastCallAt = 0;
+
+  constructor(requestsPerSecond: number) {
+    this.minIntervalMs = requestsPerSecond > 0 ? 1000 / requestsPerSecond : 0;
+  }
+
+  async throttle(): Promise<void> {
+    if (this.minIntervalMs === 0) return;
+    const now = Date.now();
+    const wait = this.minIntervalMs - (now - this.lastCallAt);
+    if (wait > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, wait));
+    }
+    this.lastCallAt = Date.now();
+  }
+}
+
 /**
  * Typed HTTP wrapper for the ELI API (api.sejm.gov.pl/eli).
  * Uses native fetch; validates responses with Zod schemas.
  * The base URL is configurable so tests can point it at an MSW server.
+ *
+ * S6-2: All public methods are wrapped in OTel spans.
+ * S6-7: Built-in rate limiter (default 10 req/s).
  */
 export class EliClient {
   readonly baseUrl: string;
+  private readonly _limiter: RateLimiter;
 
   constructor(options: EliClientOptions = {}) {
     this.baseUrl = (
       options.baseUrl ?? "https://api.sejm.gov.pl/eli"
     ).replace(/\/$/, "");
+    this._limiter = new RateLimiter(options.requestsPerSecond ?? 10);
   }
 
   private async fetchJson<T>(
     path: string,
     parse: (json: unknown) => T,
   ): Promise<T> {
+    await this._limiter.throttle();
     const url = `${this.baseUrl}/${path}`;
     const res = await fetch(url, { headers: { Accept: "application/json" } });
     if (!res.ok) {
@@ -48,6 +81,7 @@ export class EliClient {
   }
 
   private async fetchHtml(path: string): Promise<string> {
+    await this._limiter.throttle();
     const url = `${this.baseUrl}/${path}`;
     const res = await fetch(url, { headers: { Accept: "text/html" } });
     if (res.status === 404) return "";
@@ -59,36 +93,40 @@ export class EliClient {
 
   /** GET /acts/{publisher}/{year}/{position} */
   async getAct(eli: string): Promise<ActMetadata> {
-    const [publisher, year, position] = eli.split("/");
-    const raw = await this.fetchJson(
-      `acts/${publisher}/${year}/${position}`,
-      (json) => EliActMetadataResponseSchema.parse(json),
-    );
-    return {
-      eli: raw.ELI,
-      publisher: raw.publisher,
-      year: raw.year,
-      position: raw.pos,
-      title: raw.title,
-      type: raw.type,
-      status: raw.status,
-      inForce: raw.inForce,
-      announcementDate: raw.announcementDate ?? null,
-      entryIntoForce: raw.entryIntoForce ?? null,
-      repealDate: raw.repealDate ?? null,
-      changeDate: raw.changeDate ?? null,
-      textHTML: raw.textHTML,
-      keywords: raw.keywords,
-    };
+    return withSpan("EliClient.getAct", async () => {
+      const [publisher, year, position] = eli.split("/");
+      const raw = await this.fetchJson(
+        `acts/${publisher}/${year}/${position}`,
+        (json) => EliActMetadataResponseSchema.parse(json),
+      );
+      return {
+        eli: raw.ELI,
+        publisher: raw.publisher,
+        year: raw.year,
+        position: raw.pos,
+        title: raw.title,
+        type: raw.type,
+        status: raw.status,
+        inForce: raw.inForce,
+        announcementDate: raw.announcementDate ?? null,
+        entryIntoForce: raw.entryIntoForce ?? null,
+        repealDate: raw.repealDate ?? null,
+        changeDate: raw.changeDate ?? null,
+        textHTML: raw.textHTML,
+        keywords: raw.keywords,
+      };
+    }, { "eli": eli });
   }
 
   /** GET /acts/{publisher}/{year}/{position}/struct */
   async getActStruct(eli: string): Promise<EliActStructResponse> {
-    const [publisher, year, position] = eli.split("/");
-    return this.fetchJson(
-      `acts/${publisher}/${year}/${position}/struct`,
-      (json) => EliActStructResponseSchema.parse(json),
-    );
+    return withSpan("EliClient.getActStruct", async () => {
+      const [publisher, year, position] = eli.split("/");
+      return this.fetchJson(
+        `acts/${publisher}/${year}/${position}/struct`,
+        (json) => EliActStructResponseSchema.parse(json),
+      );
+    }, { "eli": eli });
   }
 
   /**
@@ -96,10 +134,12 @@ export class EliClient {
    * Returns raw HTML. Returns empty string for 404 (unit has no text).
    */
   async getUnitText(eli: string, unitPath: string): Promise<string> {
-    const [publisher, year, position] = eli.split("/");
-    return this.fetchHtml(
-      `acts/${publisher}/${year}/${position}/text.html/${unitPath}`,
-    );
+    return withSpan("EliClient.getUnitText", async () => {
+      const [publisher, year, position] = eli.split("/");
+      return this.fetchHtml(
+        `acts/${publisher}/${year}/${position}/text.html/${unitPath}`,
+      );
+    }, { "eli": eli, "unitPath": unitPath });
   }
 
   /**
@@ -111,24 +151,26 @@ export class EliClient {
     limit = 100,
     offset = 0,
   ): Promise<{ items: ChangedAct[]; count: number }> {
-    const qs = new URLSearchParams({
-      since,
-      limit: String(limit),
-      offset: String(offset),
-    });
-    const raw = await this.fetchJson(
-      `changes/acts?${qs.toString()}`,
-      (json) => EliChangedActsResponseSchema.parse(json),
-    );
-    return {
-      count: raw.count,
-      items: raw.items.map((item) => ({
-        eli: item.ELI,
-        publisher: item.publisher,
-        year: item.year,
-        position: item.pos,
-        changeDate: item.changeDate,
-      })),
-    };
+    return withSpan("EliClient.getChangedActs", async () => {
+      const qs = new URLSearchParams({
+        since,
+        limit: String(limit),
+        offset: String(offset),
+      });
+      const raw = await this.fetchJson(
+        `changes/acts?${qs.toString()}`,
+        (json) => EliChangedActsResponseSchema.parse(json),
+      );
+      return {
+        count: raw.count,
+        items: raw.items.map((item) => ({
+          eli: item.ELI,
+          publisher: item.publisher,
+          year: item.year,
+          position: item.pos,
+          changeDate: item.changeDate,
+        })),
+      };
+    }, { "since": since, "limit": limit, "offset": offset });
   }
 }

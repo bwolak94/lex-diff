@@ -2,7 +2,9 @@
 
 // S4-9: Side-by-side diff panels
 // S4-14: Loading skeletons for diff panels
+// S6-13: EventPanel memoized to avoid re-renders when Zustand focus state changes
 
+import { memo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchDiff } from "@/lib/api";
 import type { ChangeEvent } from "@/lib/api";
@@ -34,7 +36,8 @@ function DiffSkeleton() {
   );
 }
 
-function EventPanel({
+// S6-13: Memoized — only re-renders when ev or side changes
+const EventPanel = memo(function EventPanel({
   ev,
   side,
 }: {
@@ -76,7 +79,7 @@ function EventPanel({
       </p>
     </div>
   );
-}
+});
 
 interface DiffViewProps {
   eli: string;

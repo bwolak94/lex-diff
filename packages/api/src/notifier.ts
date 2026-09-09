@@ -1,4 +1,6 @@
 // S5-15: Notifier — fan-out to email + webhook with dedup via NotificationLog.
+// S6-5: OTel spans on notifyForAct.
+import { trace, SpanStatusCode } from "@opentelemetry/api";
 import type {
   ChangeEvent,
   Subscription,
@@ -7,6 +9,8 @@ import type {
 } from "@lexdiff/core";
 import type { EmailChannel } from "./channels/email.js";
 import type { WebhookChannel } from "./channels/webhook.js";
+
+const tracer = trace.getTracer("@lexdiff/api", "0.1.0");
 
 export class Notifier {
   constructor(
@@ -18,28 +22,44 @@ export class Notifier {
 
   async notifyForAct(actEli: string, events: ChangeEvent[]): Promise<void> {
     if (events.length === 0) return;
-    const subs = await this.subscriptionRepo.findByActEli(actEli);
 
-    for (const sub of subs) {
-      for (const event of events) {
-        await this._withDedup(sub.id, event.eventHash, "email", () =>
-          this.emailChannel.send({
-            to: sub.email,
-            subject: `LexDiff: Changes detected in ${actEli}`,
-            documentTitle: actEli,
-            changeDescription: `${event.type} detected`,
-          }),
-        );
+    const span = tracer.startSpan("Notifier.notifyForAct", {
+      attributes: { actEli, "events.count": events.length },
+    });
 
-        if (sub.webhookUrl) {
-          await this._withDedup(sub.id, event.eventHash, "webhook", () =>
-            this.webhookChannel.send({
-              webhookUrl: sub.webhookUrl as string,
-              payload: { actEli, subscriptionId: sub.id, event },
+    try {
+      const subs = await this.subscriptionRepo.findByActEli(actEli);
+      span.setAttribute("subscribers.count", subs.length);
+
+      for (const sub of subs) {
+        for (const event of events) {
+          await this._withDedup(sub.id, event.eventHash, "email", () =>
+            this.emailChannel.send({
+              to: sub.email,
+              subject: `LexDiff: Changes detected in ${actEli}`,
+              documentTitle: actEli,
+              changeDescription: `${event.type} detected`,
             }),
           );
+
+          if (sub.webhookUrl) {
+            await this._withDedup(sub.id, event.eventHash, "webhook", () =>
+              this.webhookChannel.send({
+                webhookUrl: sub.webhookUrl as string,
+                payload: { actEli, subscriptionId: sub.id, event },
+              }),
+            );
+          }
         }
       }
+
+      span.setStatus({ code: SpanStatusCode.OK });
+    } catch (err) {
+      span.recordException(err as Error);
+      span.setStatus({ code: SpanStatusCode.ERROR });
+      throw err;
+    } finally {
+      span.end();
     }
   }
 

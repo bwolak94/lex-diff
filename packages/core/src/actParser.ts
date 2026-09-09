@@ -2,6 +2,7 @@ import type { Unit, UnitKind } from "./types.js";
 import type { EliClient } from "./eliClient.js";
 import type { EliStructNode } from "./schemas.js";
 import { TextNormalizer } from "./textNormalizer.js";
+import { withSpan } from "./tracer.js";
 
 const normalizer = new TextNormalizer();
 
@@ -16,15 +17,23 @@ export class ActParser {
   constructor(private readonly client: EliClient) {}
 
   async parse(eli: string, textHTML: boolean): Promise<Unit[]> {
-    const struct = await this.client.getActStruct(eli);
-    const units: Unit[] = [];
-    this.traverse(struct.content, null, units);
+    return withSpan(
+      "ActParser.parse",
+      async (span) => {
+        const struct = await this.client.getActStruct(eli);
+        const units: Unit[] = [];
+        this.traverse(struct.content, null, units);
 
-    if (textHTML) {
-      await this.fetchLeafTexts(eli, units);
-    }
+        if (textHTML) {
+          await this.fetchLeafTexts(eli, units);
+        }
 
-    return units;
+        span.setAttribute("units.count", units.length);
+        span.setAttribute("textHTML", textHTML);
+        return units;
+      },
+      { eli },
+    );
   }
 
   private traverse(

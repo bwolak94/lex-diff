@@ -21,6 +21,7 @@
     "publish-dry-run": "npm publish --dry-run"
   },
   "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
     "diff-match-patch": "^1.0.5",
     "zod": "^3.24.1"
   },
