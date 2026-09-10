@@ -165,6 +165,42 @@ export function buildApp(repos: AppRepositories) {
     return rep.send(await registry.metrics());
   });
 
+  // ── GET /acts/stats — version + event counts for all acts ────────────────────
+  // Used by search cards to show diff/timeline availability at a glance.
+  typed.get(
+    "/acts/stats",
+    {
+      schema: {
+        response: {
+          200: z.array(
+            z.object({
+              eli: z.string(),
+              versionCount: z.number(),
+              eventCount: z.number(),
+            }),
+          ),
+        },
+      },
+    },
+    async () => {
+      const acts = await repos.acts.search({});
+      const result = await Promise.all(
+        acts.map(async (act) => {
+          const [versions, events] = await Promise.all([
+            repos.acts.listVersionElis(act.eli),
+            repos.changeEvents.findByActEli(act.eli),
+          ]);
+          return {
+            eli: act.eli,
+            versionCount: versions.length,
+            eventCount: events.length,
+          };
+        }),
+      );
+      return result;
+    },
+  );
+
   // ── GET /acts/search  (must precede /acts/:eli) ──────────────────────────────
   typed.get(
     "/acts/search",
