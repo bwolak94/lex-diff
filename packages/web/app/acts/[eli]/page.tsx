@@ -33,7 +33,8 @@ export default function ActDetailPage({
 }: {
   params: Promise<{ eli: string }>;
 }) {
-  const { eli } = use(params);
+  const { eli: rawEli } = use(params);
+  const eli = decodeURIComponent(rawEli);
   const internalEli = eli.replace(/:/g, "/");
 
   const { data: act, isLoading, error } = useQuery({

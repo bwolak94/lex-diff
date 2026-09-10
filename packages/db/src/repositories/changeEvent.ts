@@ -31,15 +31,13 @@ export class DrizzleChangeEventRepository implements ChangeEventRepository {
     return rows.map(rowToEvent);
   }
 
-  async saveAll(events: ChangeEvent[]): Promise<void> {
+  async saveAll(actEli: string, events: ChangeEvent[]): Promise<void> {
     if (events.length === 0) return;
 
-    // Extract actEli from the first event — all events in a batch share the same act.
-    // The payload stores event-specific fields; common fields are stored as columns.
     const rows = events.map((ev) => {
       const { eventHash, severity, effectiveDate, type, ...rest } = ev as ChangeEvent & Record<string, unknown>;
       return {
-        actEli: (rest["actEli"] ?? rest["path"] ?? "") as string,
+        actEli,
         eventHash: eventHash as string,
         type: type as string,
         severity: severity as string,

@@ -15,11 +15,13 @@ import {
   DrizzleActReferenceRepository,
   DrizzleUserRepository,
 } from "@lexdiff/db";
+import { EliClient, ActParser } from "@lexdiff/core";
 import { EmailChannel } from "./channels/email.js";
 import { WebhookChannel } from "./channels/webhook.js";
 import { Notifier } from "./notifier.js";
 import { getBoss } from "./jobs/boss.js";
 import { Scheduler } from "./jobs/scheduler.js";
+import { ActSyncService } from "./syncService.js";
 import { AuthService } from "./auth.js";
 import { BillingService } from "./billing.js";
 import { Resend } from "resend";
@@ -33,8 +35,15 @@ const stripeWebhookSecret = process.env["STRIPE_WEBHOOK_SECRET"] ?? "";
 const stripeProPriceId = process.env["STRIPE_PRO_PRICE_ID"] ?? "";
 const appBaseUrl = process.env["APP_BASE_URL"] ?? "http://localhost:3000";
 
+// ── ELI client + parser (shared singleton) ────────────────────────────────────
+
+const eliClient = new EliClient();
+const actParser = new ActParser(eliClient);
+
 // ── Repositories ──────────────────────────────────────────────────────────────
 
+const actRepo = new DrizzleActRepository(db);
+const unitRepo = new DrizzleUnitRepository(db);
 const subscriptionRepo = new DrizzleSubscriptionRepository(db);
 const changeEventRepo = new DrizzleChangeEventRepository(db);
 const jobCursorRepo = new DrizzleJobCursorRepository(db);
@@ -45,8 +54,8 @@ const userRepo = new DrizzleUserRepository(db);
 // ── App ───────────────────────────────────────────────────────────────────────
 
 const app = buildApp({
-  acts: new DrizzleActRepository(db),
-  units: new DrizzleUnitRepository(db),
+  acts: actRepo,
+  units: unitRepo,
   changeEvents: changeEventRepo,
   subscriptions: subscriptionRepo,
   references: referenceRepo,
@@ -181,6 +190,23 @@ if (stripeSecretKey && stripeWebhookSecret) {
   );
 }
 
+// ── POST /admin/sync-all — trigger immediate sync of all seeded acts ──────────
+
+app.post("/admin/sync-all", async (_req, rep) => {
+  const syncService = new ActSyncService(eliClient, actParser, actRepo, unitRepo, changeEventRepo);
+  const acts = await actRepo.search({});
+  const results: Array<{ eli: string; newEvents: number; error?: string }> = [];
+  for (const act of acts) {
+    try {
+      const r = await syncService.syncAct(act.eli);
+      results.push({ eli: act.eli, newEvents: r.newEvents });
+    } catch (err) {
+      results.push({ eli: act.eli, newEvents: 0, error: String(err).slice(0, 120) });
+    }
+  }
+  return rep.send({ synced: results.length, results });
+});
+
 // ── Start server ──────────────────────────────────────────────────────────────
 
 try {
@@ -193,24 +219,37 @@ try {
 
 // ── Start job scheduler ───────────────────────────────────────────────────────
 
-if (databaseUrl && resendApiKey) {
+if (databaseUrl) {
   try {
     const boss = await getBoss(databaseUrl);
-    const emailChannel = new EmailChannel(resendApiKey);
+    const syncService = new ActSyncService(
+      eliClient,
+      actParser,
+      actRepo,
+      unitRepo,
+      changeEventRepo,
+    );
+    const emailChannel = resendApiKey ? new EmailChannel(resendApiKey) : null;
     const webhookChannel = new WebhookChannel();
     const notifier = new Notifier(
       subscriptionRepo,
       notificationLogRepo,
-      emailChannel,
+      emailChannel ?? new EmailChannel(""),
       webhookChannel,
     );
     const scheduler = new Scheduler(
       boss,
-      { subscriptions: subscriptionRepo, changeEvents: changeEventRepo, jobCursors: jobCursorRepo },
+      {
+        subscriptions: subscriptionRepo,
+        changeEvents: changeEventRepo,
+        jobCursors: jobCursorRepo,
+        acts: actRepo,
+      },
       notifier,
+      syncService,
     );
     await scheduler.start();
-    app.log.info("Scheduler started");
+    app.log.info("Scheduler started — hourly poll registered");
   } catch (err) {
     app.log.warn({ err }, "Scheduler failed to start — running without job queue");
   }

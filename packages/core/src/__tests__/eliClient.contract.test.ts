@@ -55,12 +55,13 @@ describe("ELI API contract tests (S6-10)", () => {
     it("parses nested children recursively", () => {
       const result = EliActStructResponseSchema.safeParse(actStructFixture);
       if (!result.success) throw new Error(JSON.stringify(result.error));
-      const art1 = result.data.content[0]!;
+      // result.data is a bare EliStructNode[]
+      const art1 = result.data[0]!;
       expect(art1.children.length).toBe(2);
       expect(art1.children[0]!.type).toBe("ustep");
     });
 
-    it("rejects struct missing content array", () => {
+    it("rejects struct that is not an array", () => {
       const result = EliActStructResponseSchema.safeParse({ eli: "DU/2017/2196" });
       expect(result.success).toBe(false);
     });

@@ -5,8 +5,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { searchActs } from "@/lib/api";
-import type { ActMetadata } from "@/lib/api";
+import { searchActs, fetchActStats } from "@/lib/api";
+import type { ActMetadata, ActStats } from "@/lib/api";
 import { AppLayout } from "@/components/app-layout";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { EmptyState } from "@/components/empty-state";
@@ -15,50 +15,74 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Search } from "lucide-react";
+import { Search, GitCompare, Clock } from "lucide-react";
 
-function ActCard({ act }: { act: ActMetadata }) {
-  // Convert internal ELI (DU/2017/2196) → route ELI (DU:2017:2196)
+function ActCard({ act, stats }: { act: ActMetadata; stats?: ActStats }) {
   const routeEli = act.eli.replace(/\//g, ":");
+  const hasDiff = (stats?.versionCount ?? 0) >= 2;
+  const hasTimeline = (stats?.eventCount ?? 0) > 0;
 
   return (
-    <Link href={`/acts/${routeEli}`}>
-      <Card className="cursor-pointer transition-shadow hover:shadow-md">
-        <CardContent className="p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="font-medium text-slate-900 line-clamp-2">
-                {act.title}
-              </p>
-              <p className="mt-1 font-mono text-xs text-slate-500">{act.eli}</p>
-            </div>
-            <div className="flex shrink-0 flex-col items-end gap-1">
-              <Badge variant="outline">{act.type}</Badge>
-              <Badge variant={act.inForce ? "success" : "secondary"}>
-                {act.inForce ? "In force" : "Not in force"}
-              </Badge>
-            </div>
+    <Card className="transition-shadow hover:shadow-md">
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-4">
+          <Link href={`/acts/${routeEli}`} className="min-w-0 flex-1">
+            <p className="font-medium text-slate-900 line-clamp-2 hover:text-blue-600">
+              {act.title}
+            </p>
+            <p className="mt-1 font-mono text-xs text-slate-500">{act.eli}</p>
+          </Link>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <Badge variant="outline">{act.type}</Badge>
+            <Badge variant={act.inForce ? "success" : "secondary"}>
+              {act.inForce ? "In force" : "Not in force"}
+            </Badge>
           </div>
-          {act.keywords.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-1">
-              {act.keywords.slice(0, 5).map((kw) => (
-                <span
-                  key={kw}
-                  className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600"
-                >
-                  {kw}
-                </span>
-              ))}
-              {act.keywords.length > 5 && (
-                <span className="text-xs text-slate-400">
-                  +{act.keywords.length - 5} more
-                </span>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </Link>
+        </div>
+
+        {act.keywords.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {act.keywords.slice(0, 5).map((kw) => (
+              <span
+                key={kw}
+                className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600"
+              >
+                {kw}
+              </span>
+            ))}
+            {act.keywords.length > 5 && (
+              <span className="text-xs text-slate-400">
+                +{act.keywords.length - 5} more
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Quick links to diff/timeline when data is available */}
+        {(hasDiff || hasTimeline) && (
+          <div className="mt-3 flex gap-2 border-t border-slate-100 pt-3">
+            {hasDiff && (
+              <Link
+                href={`/acts/${routeEli}/diff`}
+                className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+              >
+                <GitCompare size={12} />
+                Diff ({stats!.versionCount} versions)
+              </Link>
+            )}
+            {hasTimeline && (
+              <Link
+                href={`/acts/${routeEli}/timeline`}
+                className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+              >
+                <Clock size={12} />
+                Timeline ({stats!.eventCount} events)
+              </Link>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -80,6 +104,15 @@ function SearchResults({
         ...(type ? { type } : {}),
       }),
   });
+
+  const { data: statsArr } = useQuery({
+    queryKey: ["acts-stats"],
+    queryFn: fetchActStats,
+    staleTime: 60_000,
+  });
+  const statsMap = Object.fromEntries(
+    (statsArr ?? []).map((s) => [s.eli, s]),
+  );
 
   if (isLoading) {
     return (
@@ -121,7 +154,7 @@ function SearchResults({
         {acts.length} result{acts.length === 1 ? "" : "s"}
       </p>
       {acts.map((act) => (
-        <ActCard key={act.eli} act={act} />
+        <ActCard key={act.eli} act={act} stats={statsMap[act.eli]} />
       ))}
     </div>
   );

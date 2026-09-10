@@ -80,6 +80,16 @@ export function fetchActVersions(eli: string): Promise<string[]> {
   return apiFetch<string[]>(`/acts/${encodeURIComponent(eli)}/versions`);
 }
 
+export interface ActStats {
+  eli: string;
+  versionCount: number;
+  eventCount: number;
+}
+
+export function fetchActStats(): Promise<ActStats[]> {
+  return apiFetch<ActStats[]>("/acts/stats");
+}
+
 export function fetchTimeline(eli: string): Promise<{ events: ChangeEvent[] }> {
   return apiFetch<{ events: ChangeEvent[] }>(
     `/acts/${encodeURIComponent(eli)}/timeline`,

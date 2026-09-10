@@ -31,20 +31,27 @@ export class EliClientError extends Error {
 
 class RateLimiter {
   private readonly minIntervalMs: number;
+  // Queue-based throttle: concurrent callers serialize through this chain
+  private queue: Promise<void> = Promise.resolve();
   private lastCallAt = 0;
 
   constructor(requestsPerSecond: number) {
     this.minIntervalMs = requestsPerSecond > 0 ? 1000 / requestsPerSecond : 0;
   }
 
-  async throttle(): Promise<void> {
-    if (this.minIntervalMs === 0) return;
-    const now = Date.now();
-    const wait = this.minIntervalMs - (now - this.lastCallAt);
-    if (wait > 0) {
-      await new Promise<void>((resolve) => setTimeout(resolve, wait));
-    }
-    this.lastCallAt = Date.now();
+  throttle(): Promise<void> {
+    if (this.minIntervalMs === 0) return Promise.resolve();
+    this.queue = this.queue.then(() => {
+      const now = Date.now();
+      const wait = this.minIntervalMs - (now - this.lastCallAt);
+      if (wait > 0) {
+        return new Promise<void>((resolve) => setTimeout(resolve, wait)).then(
+          () => { this.lastCallAt = Date.now(); },
+        );
+      }
+      this.lastCallAt = now;
+    });
+    return this.queue;
   }
 }
 
@@ -136,8 +143,14 @@ export class EliClient {
   async getUnitText(eli: string, unitPath: string): Promise<string> {
     return withSpan("EliClient.getUnitText", async () => {
       const [publisher, year, position] = eli.split("/");
+      // Strip path segments whose value (after "=") is empty — these are
+      // transparent root wrappers (e.g. "part=") that the text API ignores.
+      const cleanPath = unitPath
+        .split("/")
+        .filter((seg) => (seg.split("=")[1] ?? "") !== "")
+        .join("/");
       return this.fetchHtml(
-        `acts/${publisher}/${year}/${position}/text.html/${unitPath}`,
+        `acts/${publisher}/${year}/${position}/text.html/${cleanPath}`,
       );
     }, { "eli": eli, "unitPath": unitPath });
   }

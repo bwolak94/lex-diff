@@ -25,7 +25,7 @@ export interface UnitRepository {
 
 export interface ChangeEventRepository {
   findByActEli(actEli: string): Promise<ChangeEvent[]>;
-  saveAll(events: ChangeEvent[]): Promise<void>;
+  saveAll(actEli: string, events: ChangeEvent[]): Promise<void>;
 }
 
 export interface SubscriptionRepository {

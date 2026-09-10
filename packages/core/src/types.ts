@@ -15,7 +15,8 @@ export type UnitKind =
   | "ustep"
   | "par"
   | "punkt"
-  | "litera";
+  | "litera"
+  | string; // ELI API may return other type names (e.g. "part", "pass", "chapter")
 
 /** Change event severity for notification routing */
 export type Severity = "critical" | "high" | "medium" | "low";

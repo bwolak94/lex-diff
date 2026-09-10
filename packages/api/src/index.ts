@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import fastifyCors from "@fastify/cors";
 import fastifySwagger from "@fastify/swagger";
 import fastifySwaggerUi from "@fastify/swagger-ui";
 import { registry } from "./metrics.js";
@@ -123,6 +124,11 @@ export function buildApp(repos: AppRepositories) {
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 
+  void app.register(fastifyCors, {
+    origin: process.env["CORS_ORIGIN"] ?? true,
+    credentials: true,
+  });
+
   // Register swagger before routes
   void app.register(fastifySwagger, {
     openapi: {
@@ -158,6 +164,42 @@ export function buildApp(repos: AppRepositories) {
     rep.header("Content-Type", registry.contentType);
     return rep.send(await registry.metrics());
   });
+
+  // ── GET /acts/stats — version + event counts for all acts ────────────────────
+  // Used by search cards to show diff/timeline availability at a glance.
+  typed.get(
+    "/acts/stats",
+    {
+      schema: {
+        response: {
+          200: z.array(
+            z.object({
+              eli: z.string(),
+              versionCount: z.number(),
+              eventCount: z.number(),
+            }),
+          ),
+        },
+      },
+    },
+    async () => {
+      const acts = await repos.acts.search({});
+      const result = await Promise.all(
+        acts.map(async (act) => {
+          const [versions, events] = await Promise.all([
+            repos.acts.listVersionElis(act.eli),
+            repos.changeEvents.findByActEli(act.eli),
+          ]);
+          return {
+            eli: act.eli,
+            versionCount: versions.length,
+            eventCount: events.length,
+          };
+        }),
+      );
+      return result;
+    },
+  );
 
   // ── GET /acts/search  (must precede /acts/:eli) ──────────────────────────────
   typed.get(
