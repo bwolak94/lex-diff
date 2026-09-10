@@ -191,6 +191,56 @@ export async function deleteSubscription(id: string): Promise<void> {
   }
 }
 
+// ── Admin — local acts management ─────────────────────────────────────────────
+
+export interface LocalActSummary {
+  eli: string;
+  title: string;
+  type: string;
+  inForce: boolean;
+  changeDate: string | null;
+  versionCount: number;
+  eventCount: number;
+}
+
+export function fetchLocalActs(): Promise<LocalActSummary[]> {
+  return apiFetch<LocalActSummary[]>("/admin/acts");
+}
+
+export async function importAct(eli: string): Promise<{ eli: string; newEvents: number }> {
+  const res = await fetch(`${API_BASE}/admin/acts/import`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ eli }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`API ${res.status}: ${text || res.statusText}`);
+  }
+  return res.json() as Promise<{ eli: string; newEvents: number }>;
+}
+
+export async function syncLocalAct(eli: string): Promise<{ eli: string; newEvents: number }> {
+  const res = await fetch(`${API_BASE}/admin/acts/${encodeURIComponent(eli)}/sync`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`API ${res.status}: ${text || res.statusText}`);
+  }
+  return res.json() as Promise<{ eli: string; newEvents: number }>;
+}
+
+export async function deleteLocalAct(eli: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/admin/acts/${encodeURIComponent(eli)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok && res.status !== 204) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`API ${res.status}: ${text || res.statusText}`);
+  }
+}
+
 // ── References (B-2) ──────────────────────────────────────────────────────────
 
 export type ReferenceType = "amends" | "repeals" | "implements" | "extends";

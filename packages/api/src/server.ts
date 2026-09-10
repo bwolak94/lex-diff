@@ -207,6 +207,7 @@ app.post("/admin/sync-all", async (_req, rep) => {
   return rep.send({ synced: results.length, results });
 });
 
+
 // ── Start server ──────────────────────────────────────────────────────────────
 
 try {

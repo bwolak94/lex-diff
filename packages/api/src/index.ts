@@ -10,7 +10,7 @@ import {
 } from "fastify-type-provider-zod";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { DiffEngine, EliClient } from "@lexdiff/core";
+import { DiffEngine, EliClient, ActParser } from "@lexdiff/core";
 import type {
   ActRepository,
   UnitRepository,
@@ -19,6 +19,7 @@ import type {
   ActReferenceRepository,
   UserRepository,
 } from "@lexdiff/core";
+import { ActSyncService } from "./syncService.js";
 import { generateTimelinePdf } from "./pdf.js";
 
 // ── Zod schemas for API responses ─────────────────────────────────────────────
@@ -522,6 +523,131 @@ export function buildApp(repos: AppRepositories, injectedEliClient?: EliClient) 
       const existing = await repos.subscriptions.findById(req.params.id);
       if (!existing) return rep.code(404).send({ error: "Subscription not found" });
       await repos.subscriptions.delete(req.params.id);
+      return rep.code(204).send({});
+    },
+  );
+
+  // ── GET /admin/acts — list local acts with version + event counts ──────────────
+  typed.get(
+    "/admin/acts",
+    {
+      schema: {
+        response: {
+          200: z.array(
+            z.object({
+              eli: z.string(),
+              title: z.string(),
+              type: z.string(),
+              inForce: z.boolean(),
+              changeDate: z.string().nullable(),
+              versionCount: z.number(),
+              eventCount: z.number(),
+            }),
+          ),
+        },
+      },
+    },
+    async () => {
+      const allActs = await repos.acts.search({});
+      return Promise.all(
+        allActs.map(async (act) => {
+          const [versions, events] = await Promise.all([
+            repos.acts.listVersionElis(act.eli),
+            repos.changeEvents.findByActEli(act.eli),
+          ]);
+          return {
+            eli: act.eli,
+            title: act.title,
+            type: act.type,
+            inForce: act.inForce,
+            changeDate: act.changeDate,
+            versionCount: versions.length,
+            eventCount: events.length,
+          };
+        }),
+      );
+    },
+  );
+
+  // ── POST /admin/acts/import — import a single act from ELI API ────────────────
+  typed.post(
+    "/admin/acts/import",
+    {
+      schema: {
+        body: z.object({ eli: z.string().min(1) }),
+        response: {
+          201: z.object({ eli: z.string(), newEvents: z.number() }),
+          422: ErrorSchema,
+        },
+      },
+    },
+    async (req, rep) => {
+      const rawEli = req.body.eli.replace(/:/g, "/").trim();
+      const actParser = new ActParser(eliClient);
+      const syncService = new ActSyncService(
+        eliClient,
+        actParser,
+        repos.acts,
+        repos.units,
+        repos.changeEvents,
+      );
+      try {
+        const result = await syncService.syncAct(rawEli);
+        return rep.code(201).send({ eli: rawEli, newEvents: result.newEvents });
+      } catch (err) {
+        return rep.code(422).send({ error: String(err).slice(0, 200) });
+      }
+    },
+  );
+
+  // ── POST /admin/acts/:eli/sync — re-sync a specific local act ─────────────────
+  typed.post(
+    "/admin/acts/:eli/sync",
+    {
+      schema: {
+        params: EliParamSchema,
+        response: {
+          200: z.object({ eli: z.string(), newEvents: z.number() }),
+          422: ErrorSchema,
+        },
+      },
+    },
+    async (req, rep) => {
+      const internalEli = req.params.eli.replace(/:/g, "/");
+      const actParser = new ActParser(eliClient);
+      const syncService = new ActSyncService(
+        eliClient,
+        actParser,
+        repos.acts,
+        repos.units,
+        repos.changeEvents,
+      );
+      try {
+        const result = await syncService.syncAct(internalEli);
+        return rep.send({ eli: internalEli, newEvents: result.newEvents });
+      } catch (err) {
+        return rep.code(422).send({ error: String(err).slice(0, 200) });
+      }
+    },
+  );
+
+  // ── DELETE /admin/acts/:eli — remove act and all related data ─────────────────
+  typed.delete(
+    "/admin/acts/:eli",
+    {
+      schema: {
+        params: EliParamSchema,
+        response: {
+          204: z.object({}),
+          404: ErrorSchema,
+        },
+      },
+    },
+    async (req, rep) => {
+      const internalEli = req.params.eli.replace(/:/g, "/");
+      const existing = await repos.acts.findByEli(internalEli);
+      if (!existing) return rep.code(404).send({ error: "Act not found" });
+      await repos.acts.deleteByEli(internalEli);
       return rep.code(204).send({});
     },
   );
