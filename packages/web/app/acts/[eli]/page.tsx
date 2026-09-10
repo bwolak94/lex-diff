@@ -123,20 +123,28 @@ export default function ActDetailPage({
 
               {/* Actions */}
               <div className="flex flex-wrap gap-3">
-                <Link
-                  href={`/acts/${eli}/timeline`}
-                  className="inline-flex items-center rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
-                >
-                  <Clock size={16} className="mr-2" />
-                  View Timeline
-                </Link>
-                <Link
-                  href={`/acts/${eli}/diff`}
-                  className="inline-flex items-center rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
-                >
-                  <GitCompare size={16} className="mr-2" />
-                  Diff Versions
-                </Link>
+                {act.isLocal ? (
+                  <>
+                    <Link
+                      href={`/acts/${eli}/timeline`}
+                      className="inline-flex items-center rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                    >
+                      <Clock size={16} className="mr-2" />
+                      View Timeline
+                    </Link>
+                    <Link
+                      href={`/acts/${eli}/diff`}
+                      className="inline-flex items-center rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                    >
+                      <GitCompare size={16} className="mr-2" />
+                      Diff Versions
+                    </Link>
+                  </>
+                ) : (
+                  <p className="text-sm text-slate-400">
+                    Timeline and diff are available only for locally imported acts.
+                  </p>
+                )}
                 <Link
                   href={`/subscriptions?actEli=${encodeURIComponent(eli)}`}
                   className="inline-flex items-center rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"

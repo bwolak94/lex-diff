@@ -279,7 +279,7 @@ export function buildApp(repos: AppRepositories) {
       schema: {
         params: EliParamSchema,
         response: {
-          200: ActMetadataSchema,
+          200: ActMetadataSchema.extend({ isLocal: z.boolean() }),
           404: ErrorSchema,
         },
       },
@@ -287,11 +287,11 @@ export function buildApp(repos: AppRepositories) {
     async (req, rep) => {
       const internalEli = req.params.eli.replace(/:/g, "/");
       const meta = await repos.acts.findByEli(internalEli);
-      if (meta) return meta;
+      if (meta) return { ...meta, isLocal: true };
 
       // Not in local DB — fall back to ELI API (covers "Metadata only" acts)
       try {
-        return await eliClient.getAct(internalEli);
+        return { ...(await eliClient.getAct(internalEli)), isLocal: false };
       } catch {
         return rep.code(404).send({ error: "Act not found" });
       }

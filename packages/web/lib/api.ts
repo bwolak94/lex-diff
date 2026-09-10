@@ -72,8 +72,8 @@ export interface ChangeEvent {
 
 // ── API functions ─────────────────────────────────────────────────────────────
 
-export function fetchAct(eli: string): Promise<ActMetadata> {
-  return apiFetch<ActMetadata>(`/acts/${encodeURIComponent(eli)}`);
+export function fetchAct(eli: string): Promise<ActMetadata & { isLocal: boolean }> {
+  return apiFetch<ActMetadata & { isLocal: boolean }>(`/acts/${encodeURIComponent(eli)}`);
 }
 
 export function fetchActVersions(eli: string): Promise<string[]> {
