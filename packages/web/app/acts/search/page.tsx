@@ -1,12 +1,12 @@
 "use client";
 
-// S4-5: Search page — keyword/type filters, results list
+// S4-5: Search page — local DB search + live ELI API passthrough search
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { searchActs, fetchActStats } from "@/lib/api";
-import type { ActMetadata, ActStats } from "@/lib/api";
+import { searchActs, searchEliActs, fetchActStats } from "@/lib/api";
+import type { ActMetadata, ActMetadataWithLocal, ActStats } from "@/lib/api";
 import { AppLayout } from "@/components/app-layout";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { EmptyState } from "@/components/empty-state";
@@ -15,12 +15,22 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Search, GitCompare, Clock } from "lucide-react";
+import { Search, GitCompare, Clock, Globe, Database } from "lucide-react";
 
-function ActCard({ act, stats }: { act: ActMetadata; stats?: ActStats }) {
+// ── Act card ───────────────────────────────────────────────────────────────────
+
+function ActCard({
+  act,
+  stats,
+  isLocal = true,
+}: {
+  act: ActMetadata;
+  stats?: ActStats;
+  isLocal?: boolean;
+}) {
   const routeEli = act.eli.replace(/\//g, ":");
-  const hasDiff = (stats?.versionCount ?? 0) >= 2;
-  const hasTimeline = (stats?.eventCount ?? 0) > 0;
+  const hasDiff = isLocal && (stats?.versionCount ?? 0) >= 2;
+  const hasTimeline = isLocal && (stats?.eventCount ?? 0) > 0;
 
   return (
     <Card className="transition-shadow hover:shadow-md">
@@ -37,6 +47,11 @@ function ActCard({ act, stats }: { act: ActMetadata; stats?: ActStats }) {
             <Badge variant={act.inForce ? "success" : "secondary"}>
               {act.inForce ? "In force" : "Not in force"}
             </Badge>
+            {!isLocal && (
+              <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
+                Metadata only
+              </Badge>
+            )}
           </div>
         </div>
 
@@ -58,7 +73,6 @@ function ActCard({ act, stats }: { act: ActMetadata; stats?: ActStats }) {
           </div>
         )}
 
-        {/* Quick links to diff/timeline when data is available */}
         {(hasDiff || hasTimeline) && (
           <div className="mt-3 flex gap-2 border-t border-slate-100 pt-3">
             {hasDiff && (
@@ -86,23 +100,12 @@ function ActCard({ act, stats }: { act: ActMetadata; stats?: ActStats }) {
   );
 }
 
-function SearchResults({
-  q,
-  keyword,
-  type,
-}: {
-  q: string;
-  keyword: string;
-  type: string;
-}) {
+// ── Local search results (our DB) ─────────────────────────────────────────────
+
+function LocalResults({ q, keyword, type }: { q: string; keyword: string; type: string }) {
   const { data, isLoading, error } = useQuery({
     queryKey: ["search", q, keyword, type],
-    queryFn: () =>
-      searchActs({
-        ...(q ? { q } : {}),
-        ...(keyword ? { keyword } : {}),
-        ...(type ? { type } : {}),
-      }),
+    queryFn: () => searchActs({ ...(q ? { q } : {}), ...(keyword ? { keyword } : {}), ...(type ? { type } : {}) }),
   });
 
   const { data: statsArr } = useQuery({
@@ -110,70 +113,127 @@ function SearchResults({
     queryFn: fetchActStats,
     staleTime: 60_000,
   });
-  const statsMap = Object.fromEntries(
-    (statsArr ?? []).map((s) => [s.eli, s]),
-  );
+  const statsMap = Object.fromEntries((statsArr ?? []).map((s) => [s.eli, s]));
 
-  if (isLoading) {
-    return (
-      <div className="space-y-3">
-        {[...Array(4)].map((_, i) => (
-          <Card key={i}>
-            <CardContent className="p-4">
-              <Skeleton className="mb-2 h-5 w-3/4" />
-              <Skeleton className="h-4 w-1/3" />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-        Error loading results: {(error as Error).message}
-      </div>
-    );
-  }
+  if (isLoading) return <ResultsSkeleton />;
+  if (error) return <ErrorBox message={(error as Error).message} />;
 
   const acts = data ?? [];
-
-  if (acts.length === 0) {
-    return (
-      <EmptyState
-        title="No acts found"
-        description="Try different search terms or clear the filters."
-      />
-    );
-  }
+  if (acts.length === 0) return <EmptyState title="No local acts found" description="Try the Sejm search tab to search the full corpus." />;
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-slate-500">
-        {acts.length} result{acts.length === 1 ? "" : "s"}
-      </p>
+      <p className="text-sm text-slate-500">{acts.length} result{acts.length === 1 ? "" : "s"} from local database</p>
       {acts.map((act) => (
-        <ActCard key={act.eli} act={act} stats={statsMap[act.eli]} />
+        <ActCard key={act.eli} act={act} stats={statsMap[act.eli]} isLocal />
       ))}
     </div>
   );
 }
 
+// ── Live ELI search results (full 164k corpus) ────────────────────────────────
+
+function EliResults({
+  q,
+  type,
+  publisher,
+  page,
+}: {
+  q: string;
+  type: string;
+  publisher: string;
+  page: number;
+}) {
+  const limit = 20;
+  const offset = page * limit;
+
+  const { data, isLoading, error, isFetching } = useQuery({
+    queryKey: ["eli-search", q, type, publisher, page],
+    queryFn: () => searchEliActs({ ...(q ? { q } : {}), ...(type ? { type } : {}), ...(publisher ? { publisher } : {}), limit, offset }),
+    staleTime: 60_000,
+  });
+
+  if (isLoading) return <ResultsSkeleton />;
+  if (error) return <ErrorBox message={(error as Error).message} />;
+
+  const { items = [], totalCount = 0 } = data ?? {};
+  if (items.length === 0) return <EmptyState title="No acts found in Sejm database" description="Try different search terms." />;
+
+  const totalPages = Math.ceil(totalCount / limit);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-slate-500">
+          {totalCount.toLocaleString()} results in Sejm database
+          {isFetching && <span className="ml-2 text-slate-400">(updating…)</span>}
+        </p>
+        {totalPages > 1 && (
+          <p className="text-xs text-slate-400">
+            Page {page + 1} of {totalPages}
+          </p>
+        )}
+      </div>
+      {items.map((act: ActMetadataWithLocal) => (
+        <ActCard key={act.eli} act={act} isLocal={act.isLocal} />
+      ))}
+      {totalPages > 1 && (
+        <p className="text-center text-xs text-slate-400">
+          Showing {offset + 1}–{Math.min(offset + limit, totalCount)} of {totalCount.toLocaleString()}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── Shared helpers ─────────────────────────────────────────────────────────────
+
+function ResultsSkeleton() {
+  return (
+    <div className="space-y-3">
+      {[...Array(4)].map((_, i) => (
+        <Card key={i}>
+          <CardContent className="p-4">
+            <Skeleton className="mb-2 h-5 w-3/4" />
+            <Skeleton className="h-4 w-1/3" />
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function ErrorBox({ message }: { message: string }) {
+  return (
+    <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+      Error: {message}
+    </div>
+  );
+}
+
+// ── Page ───────────────────────────────────────────────────────────────────────
+
+type Tab = "local" | "sejm";
+
 export default function SearchPage() {
   const [q, setQ] = useState("");
   const [keyword, setKeyword] = useState("");
   const [type, setType] = useState("");
+  const [publisher, setPublisher] = useState("");
+  const [tab, setTab] = useState<Tab>("local");
+  const [page, setPage] = useState(0);
+
   const [submitted, setSubmitted] = useState<{
-    q: string;
-    keyword: string;
-    type: string;
-  }>({ q: "", keyword: "", type: "" });
+    q: string; keyword: string; type: string; publisher: string;
+  }>({ q: "", keyword: "", type: "", publisher: "" });
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
-    setSubmitted({ q, keyword, type });
+    setSubmitted({ q, keyword, type, publisher });
+    setPage(0);
   }
+
+  const hasQuery = submitted.q || submitted.keyword || submitted.type || submitted.publisher;
 
   return (
     <AppLayout>
@@ -181,6 +241,7 @@ export default function SearchPage() {
         <h1 className="mb-6 text-2xl font-bold text-slate-900">Search Acts</h1>
 
         <ErrorBoundary>
+          {/* Search form */}
           <form onSubmit={handleSearch} className="mb-6 space-y-3">
             <div className="flex gap-2">
               <Input
@@ -205,14 +266,87 @@ export default function SearchPage() {
                 value={type}
                 onChange={(e) => setType(e.target.value)}
               />
+              <Input
+                placeholder="Publisher (e.g. DU)…"
+                value={publisher}
+                onChange={(e) => setPublisher(e.target.value)}
+                className="w-36 shrink-0"
+              />
             </div>
           </form>
 
-          <SearchResults
-            q={submitted.q}
-            keyword={submitted.keyword}
-            type={submitted.type}
-          />
+          {/* Source tabs */}
+          {hasQuery && (
+            <div className="mb-4 flex gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
+              <button
+                onClick={() => setTab("local")}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                  tab === "local"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                <Database size={14} />
+                Local database
+              </button>
+              <button
+                onClick={() => { setTab("sejm"); setPage(0); }}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                  tab === "sejm"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                <Globe size={14} />
+                All Sejm acts (164 k+)
+              </button>
+            </div>
+          )}
+
+          {/* Results */}
+          {hasQuery && tab === "local" && (
+            <LocalResults
+              q={submitted.q}
+              keyword={submitted.keyword}
+              type={submitted.type}
+            />
+          )}
+
+          {hasQuery && tab === "sejm" && (
+            <>
+              <EliResults
+                q={submitted.q}
+                type={submitted.type}
+                publisher={submitted.publisher}
+                page={page}
+              />
+              {/* Pagination */}
+              <div className="mt-4 flex justify-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page === 0}
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </>
+          )}
+
+          {!hasQuery && (
+            <EmptyState
+              title="Search for acts"
+              description="Enter a title, keyword, or type above and press Search."
+            />
+          )}
         </ErrorBoundary>
       </div>
     </AppLayout>
