@@ -1,8 +1,9 @@
 "use client";
 
-// S4-5: Search page — local DB search + live ELI API passthrough search
+// S4-5: Search page — debounced auto-search, autocomplete dropdown,
+//        local DB tab + live ELI API passthrough tab (164k acts)
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { searchActs, searchEliActs, fetchActStats } from "@/lib/api";
@@ -15,7 +16,18 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Search, GitCompare, Clock, Globe, Database } from "lucide-react";
+import { Search, GitCompare, Clock, Globe, Database, Loader2 } from "lucide-react";
+
+// ── Debounce hook ──────────────────────────────────────────────────────────────
+
+function useDebounce<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(id);
+  }, [value, delayMs]);
+  return debounced;
+}
 
 // ── Act card ───────────────────────────────────────────────────────────────────
 
@@ -100,12 +112,81 @@ function ActCard({
   );
 }
 
-// ── Local search results (our DB) ─────────────────────────────────────────────
+// ── Autocomplete dropdown ──────────────────────────────────────────────────────
 
-function LocalResults({ q, keyword, type }: { q: string; keyword: string; type: string }) {
+function Autocomplete({
+  inputValue,
+  onSelect,
+}: {
+  inputValue: string;
+  onSelect: (title: string) => void;
+}) {
+  const debouncedInput = useDebounce(inputValue, 250);
+  const [open, setOpen] = useState(false);
+
+  const { data, isFetching } = useQuery({
+    queryKey: ["autocomplete", debouncedInput],
+    queryFn: () => searchEliActs({ q: debouncedInput, limit: 7 }),
+    enabled: debouncedInput.length >= 3,
+    staleTime: 30_000,
+  });
+
+  const suggestions = data?.items ?? [];
+
+  useEffect(() => {
+    setOpen(debouncedInput.length >= 3 && suggestions.length > 0);
+  }, [debouncedInput, suggestions.length]);
+
+  if (!open) return null;
+
+  return (
+    <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
+      {isFetching && (
+        <div className="flex items-center gap-2 px-4 py-2 text-xs text-slate-400">
+          <Loader2 size={12} className="animate-spin" /> Searching…
+        </div>
+      )}
+      {suggestions.map((act) => (
+        <button
+          key={act.eli}
+          type="button"
+          onMouseDown={(e) => {
+            e.preventDefault(); // keep focus on input
+            onSelect(act.title);
+            setOpen(false);
+          }}
+          className="flex w-full flex-col px-4 py-2.5 text-left hover:bg-slate-50"
+        >
+          <span className="line-clamp-1 text-sm text-slate-900">{act.title}</span>
+          <span className="font-mono text-xs text-slate-400">{act.eli}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── Local results ──────────────────────────────────────────────────────────────
+
+function LocalResults({
+  q,
+  keyword,
+  type,
+  onNoResults,
+}: {
+  q: string;
+  keyword: string;
+  type: string;
+  onNoResults: () => void;
+}) {
   const { data, isLoading, error } = useQuery({
     queryKey: ["search", q, keyword, type],
-    queryFn: () => searchActs({ ...(q ? { q } : {}), ...(keyword ? { keyword } : {}), ...(type ? { type } : {}) }),
+    queryFn: () =>
+      searchActs({
+        ...(q ? { q } : {}),
+        ...(keyword ? { keyword } : {}),
+        ...(type ? { type } : {}),
+      }),
+    enabled: Boolean(q || keyword || type),
   });
 
   const { data: statsArr } = useQuery({
@@ -115,15 +196,33 @@ function LocalResults({ q, keyword, type }: { q: string; keyword: string; type: 
   });
   const statsMap = Object.fromEntries((statsArr ?? []).map((s) => [s.eli, s]));
 
+  const acts = data ?? [];
+
+  // Auto-suggest Sejm tab when local has nothing
+  useEffect(() => {
+    if (!isLoading && acts.length === 0 && (q || keyword || type)) {
+      onNoResults();
+    }
+  }, [isLoading, acts.length, q, keyword, type, onNoResults]);
+
   if (isLoading) return <ResultsSkeleton />;
   if (error) return <ErrorBox message={(error as Error).message} />;
 
-  const acts = data ?? [];
-  if (acts.length === 0) return <EmptyState title="No local acts found" description="Try the Sejm search tab to search the full corpus." />;
+  if (acts.length === 0) {
+    return (
+      <div className="space-y-3">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          No acts found in the local database. Switching to the Sejm full corpus…
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-slate-500">{acts.length} result{acts.length === 1 ? "" : "s"} from local database</p>
+      <p className="text-sm text-slate-500">
+        {acts.length} result{acts.length === 1 ? "" : "s"} from local database
+      </p>
       {acts.map((act) => (
         <ActCard key={act.eli} act={act} stats={statsMap[act.eli]} isLocal />
       ))}
@@ -131,25 +230,35 @@ function LocalResults({ q, keyword, type }: { q: string; keyword: string; type: 
   );
 }
 
-// ── Live ELI search results (full 164k corpus) ────────────────────────────────
+// ── Sejm (ELI) results ────────────────────────────────────────────────────────
 
 function EliResults({
   q,
   type,
   publisher,
   page,
+  onPageChange,
 }: {
   q: string;
   type: string;
   publisher: string;
   page: number;
+  onPageChange: (p: number) => void;
 }) {
   const limit = 20;
   const offset = page * limit;
 
   const { data, isLoading, error, isFetching } = useQuery({
     queryKey: ["eli-search", q, type, publisher, page],
-    queryFn: () => searchEliActs({ ...(q ? { q } : {}), ...(type ? { type } : {}), ...(publisher ? { publisher } : {}), limit, offset }),
+    queryFn: () =>
+      searchEliActs({
+        ...(q ? { q } : {}),
+        ...(type ? { type } : {}),
+        ...(publisher ? { publisher } : {}),
+        limit,
+        offset,
+      }),
+    enabled: Boolean(q || type || publisher),
     staleTime: 60_000,
   });
 
@@ -157,7 +266,13 @@ function EliResults({
   if (error) return <ErrorBox message={(error as Error).message} />;
 
   const { items = [], totalCount = 0 } = data ?? {};
-  if (items.length === 0) return <EmptyState title="No acts found in Sejm database" description="Try different search terms." />;
+  if (items.length === 0)
+    return (
+      <EmptyState
+        title="No acts found in Sejm database"
+        description="Try different search terms."
+      />
+    );
 
   const totalPages = Math.ceil(totalCount / limit);
 
@@ -166,7 +281,11 @@ function EliResults({
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-500">
           {totalCount.toLocaleString()} results in Sejm database
-          {isFetching && <span className="ml-2 text-slate-400">(updating…)</span>}
+          {isFetching && (
+            <span className="ml-2 inline-flex items-center gap-1 text-slate-400">
+              <Loader2 size={11} className="animate-spin" /> updating…
+            </span>
+          )}
         </p>
         {totalPages > 1 && (
           <p className="text-xs text-slate-400">
@@ -174,19 +293,40 @@ function EliResults({
           </p>
         )}
       </div>
+
       {items.map((act: ActMetadataWithLocal) => (
         <ActCard key={act.eli} act={act} isLocal={act.isLocal} />
       ))}
+
       {totalPages > 1 && (
-        <p className="text-center text-xs text-slate-400">
-          Showing {offset + 1}–{Math.min(offset + limit, totalCount)} of {totalCount.toLocaleString()}
-        </p>
+        <div className="flex items-center justify-center gap-2 pt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page === 0}
+            onClick={() => onPageChange(page - 1)}
+          >
+            Previous
+          </Button>
+          <span className="text-xs text-slate-400">
+            {offset + 1}–{Math.min(offset + limit, totalCount)} of{" "}
+            {totalCount.toLocaleString()}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page + 1 >= totalPages}
+            onClick={() => onPageChange(page + 1)}
+          >
+            Next
+          </Button>
+        </div>
       )}
     </div>
   );
 }
 
-// ── Shared helpers ─────────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function ResultsSkeleton() {
   return (
@@ -222,18 +362,26 @@ export default function SearchPage() {
   const [publisher, setPublisher] = useState("");
   const [tab, setTab] = useState<Tab>("local");
   const [page, setPage] = useState(0);
+  const inputWrapRef = useRef<HTMLDivElement>(null);
 
-  const [submitted, setSubmitted] = useState<{
-    q: string; keyword: string; type: string; publisher: string;
-  }>({ q: "", keyword: "", type: "", publisher: "" });
+  // Debounce all filter fields — results update automatically 400ms after typing stops
+  const debouncedQ = useDebounce(q, 400);
+  const debouncedKeyword = useDebounce(keyword, 400);
+  const debouncedType = useDebounce(type, 400);
+  const debouncedPublisher = useDebounce(publisher, 400);
 
-  function handleSearch(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitted({ q, keyword, type, publisher });
+  // Reset page when query changes
+  useEffect(() => {
     setPage(0);
-  }
+  }, [debouncedQ, debouncedType, debouncedPublisher]);
 
-  const hasQuery = submitted.q || submitted.keyword || submitted.type || submitted.publisher;
+  const hasQuery =
+    debouncedQ || debouncedKeyword || debouncedType || debouncedPublisher;
+
+  function handleSelectSuggestion(title: string) {
+    setQ(title);
+    inputWrapRef.current?.querySelector("input")?.blur();
+  }
 
   return (
     <AppLayout>
@@ -241,20 +389,35 @@ export default function SearchPage() {
         <h1 className="mb-6 text-2xl font-bold text-slate-900">Search Acts</h1>
 
         <ErrorBoundary>
-          {/* Search form */}
-          <form onSubmit={handleSearch} className="mb-6 space-y-3">
-            <div className="flex gap-2">
-              <Input
-                placeholder="Search by title…"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                className="flex-1"
-              />
+          {/* Search form — submitting is optional, results update on debounce */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              inputWrapRef.current?.querySelector("input")?.blur();
+            }}
+            className="mb-6 space-y-3"
+          >
+            {/* Main title search with autocomplete */}
+            <div className="relative flex gap-2">
+              <div className="relative flex-1" ref={inputWrapRef}>
+                <Input
+                  placeholder="Search by title…"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  autoComplete="off"
+                />
+                <Autocomplete
+                  inputValue={q}
+                  onSelect={handleSelectSuggestion}
+                />
+              </div>
               <Button type="submit">
                 <Search size={16} className="mr-1" />
                 Search
               </Button>
             </div>
+
+            {/* Secondary filters */}
             <div className="flex gap-2">
               <Input
                 placeholder="Keyword…"
@@ -290,7 +453,10 @@ export default function SearchPage() {
                 Local database
               </button>
               <button
-                onClick={() => { setTab("sejm"); setPage(0); }}
+                onClick={() => {
+                  setTab("sejm");
+                  setPage(0);
+                }}
                 className={`flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                   tab === "sejm"
                     ? "bg-white text-slate-900 shadow-sm"
@@ -306,45 +472,27 @@ export default function SearchPage() {
           {/* Results */}
           {hasQuery && tab === "local" && (
             <LocalResults
-              q={submitted.q}
-              keyword={submitted.keyword}
-              type={submitted.type}
+              q={debouncedQ}
+              keyword={debouncedKeyword}
+              type={debouncedType}
+              onNoResults={() => setTab("sejm")}
             />
           )}
 
           {hasQuery && tab === "sejm" && (
-            <>
-              <EliResults
-                q={submitted.q}
-                type={submitted.type}
-                publisher={submitted.publisher}
-                page={page}
-              />
-              {/* Pagination */}
-              <div className="mt-4 flex justify-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page === 0}
-                  onClick={() => setPage((p) => p - 1)}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  Next
-                </Button>
-              </div>
-            </>
+            <EliResults
+              q={debouncedQ}
+              type={debouncedType}
+              publisher={debouncedPublisher}
+              page={page}
+              onPageChange={setPage}
+            />
           )}
 
           {!hasQuery && (
             <EmptyState
               title="Search for acts"
-              description="Enter a title, keyword, or type above and press Search."
+              description="Start typing to search — results appear automatically."
             />
           )}
         </ErrorBoundary>
