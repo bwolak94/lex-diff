@@ -287,8 +287,14 @@ export function buildApp(repos: AppRepositories) {
     async (req, rep) => {
       const internalEli = req.params.eli.replace(/:/g, "/");
       const meta = await repos.acts.findByEli(internalEli);
-      if (!meta) return rep.code(404).send({ error: "Act not found" });
-      return meta;
+      if (meta) return meta;
+
+      // Not in local DB — fall back to ELI API (covers "Metadata only" acts)
+      try {
+        return await eliClient.getAct(internalEli);
+      } catch {
+        return rep.code(404).send({ error: "Act not found" });
+      }
     },
   );
 
