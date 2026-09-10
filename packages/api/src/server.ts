@@ -207,6 +207,83 @@ app.post("/admin/sync-all", async (_req, rep) => {
   return rep.send({ synced: results.length, results });
 });
 
+// ── GET /admin/acts — list local acts with version + event counts ──────────────
+
+app.get("/admin/acts", async (_req, rep) => {
+  const allActs = await actRepo.search({});
+  const result = await Promise.all(
+    allActs.map(async (act) => {
+      const [versions, events] = await Promise.all([
+        actRepo.listVersionElis(act.eli),
+        changeEventRepo.findByActEli(act.eli),
+      ]);
+      return {
+        eli: act.eli,
+        title: act.title,
+        type: act.type,
+        inForce: act.inForce,
+        changeDate: act.changeDate,
+        versionCount: versions.length,
+        eventCount: events.length,
+      };
+    }),
+  );
+  return rep.send(result);
+});
+
+// ── POST /admin/acts/import — import a single act from ELI API ────────────────
+
+app.post<{ Body: { eli: string } }>(
+  "/admin/acts/import",
+  {
+    schema: {
+      body: { type: "object", properties: { eli: { type: "string" } }, required: ["eli"] },
+    },
+  },
+  async (req, rep) => {
+    const rawEli = req.body.eli.replace(/:/g, "/").trim();
+    const syncService = new ActSyncService(eliClient, actParser, actRepo, unitRepo, changeEventRepo);
+    try {
+      const result = await syncService.syncAct(rawEli);
+      return rep.code(201).send({ eli: rawEli, newEvents: result.newEvents });
+    } catch (err) {
+      return rep.code(422).send({ error: String(err).slice(0, 200) });
+    }
+  },
+);
+
+// ── POST /admin/acts/:eli/sync — re-sync a specific local act ─────────────────
+
+app.post<{ Params: { eli: string } }>("/admin/acts/:eli/sync", async (req, rep) => {
+  const internalEli = req.params.eli.replace(/:/g, "/");
+  const syncService = new ActSyncService(eliClient, actParser, actRepo, unitRepo, changeEventRepo);
+  try {
+    const result = await syncService.syncAct(internalEli);
+    return rep.send({ eli: internalEli, newEvents: result.newEvents });
+  } catch (err) {
+    return rep.code(422).send({ error: String(err).slice(0, 200) });
+  }
+});
+
+// ── DELETE /admin/acts/:eli — remove act and all related data ─────────────────
+
+app.delete<{ Params: { eli: string } }>("/admin/acts/:eli", async (req, rep) => {
+  const internalEli = req.params.eli.replace(/:/g, "/");
+  const existing = await actRepo.findByEli(internalEli);
+  if (!existing) return rep.code(404).send({ error: "Act not found" });
+
+  // Delete in dependency order (no cascade FK defined in schema)
+  const versionElis = await actRepo.listVersionElis(internalEli);
+  for (const vEli of versionElis) {
+    await db.delete(schema.units).where(eq(schema.units.actVersionEli, vEli));
+  }
+  await db.delete(schema.changeEvents).where(eq(schema.changeEvents.actEli, internalEli));
+  await db.delete(schema.actVersions).where(eq(schema.actVersions.actEli, internalEli));
+  await db.delete(schema.acts).where(eq(schema.acts.eli, internalEli));
+
+  return rep.code(204).send();
+});
+
 // ── Start server ──────────────────────────────────────────────────────────────
 
 try {
