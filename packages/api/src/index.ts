@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import fastifyCors from "@fastify/cors";
 import fastifySwagger from "@fastify/swagger";
 import fastifySwaggerUi from "@fastify/swagger-ui";
 import { registry } from "./metrics.js";
@@ -122,6 +123,11 @@ export function buildApp(repos: AppRepositories) {
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
+
+  void app.register(fastifyCors, {
+    origin: process.env["CORS_ORIGIN"] ?? true,
+    credentials: true,
+  });
 
   // Register swagger before routes
   void app.register(fastifySwagger, {

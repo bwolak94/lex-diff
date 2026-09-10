@@ -72,9 +72,8 @@ describe("EliClient.getAct", () => {
 describe("EliClient.getActStruct", () => {
   it("returns parsed struct with recursive children", async () => {
     const struct = await client.getActStruct(ACT_ELI);
-    expect(struct.eli).toBe(ACT_ELI);
-    expect(struct.content).toHaveLength(3);
-    const art1 = struct.content[0]!;
+    expect(struct).toHaveLength(3);
+    const art1 = struct[0]!;
     expect(art1.type).toBe("art");
     expect(art1.num).toBe("1");
     expect(art1.children).toHaveLength(2);

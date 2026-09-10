@@ -37,7 +37,7 @@ export class ActParser {
       async (span) => {
         const struct = await this.client.getActStruct(eli);
         const units: Unit[] = [];
-        this.traverse(struct.content, null, units);
+        this.traverse(struct, null, units);
 
         if (textHTML) {
           await this.fetchLeafTexts(eli, units);
@@ -123,10 +123,14 @@ export class ActParser {
 
     await Promise.all(
       leaves.map(async (unit) => {
-        const html = await this.client.getUnitText(eli, unit.path);
-        if (html) {
-          unit.text = normalizer.normalize(html);
-          unit.textHash = normalizer.hash(html);
+        try {
+          const html = await this.client.getUnitText(eli, unit.path);
+          if (html) {
+            unit.text = normalizer.normalize(html);
+            unit.textHash = normalizer.hash(html);
+          }
+        } catch {
+          // Individual text fetch failure — leave unit.text as null
         }
       }),
     );

@@ -76,23 +76,13 @@ export class InMemoryChangeEventRepository implements ChangeEventRepository {
     return byHash ? Array.from(byHash.values()) : [];
   }
 
-  async saveAll(events: ChangeEvent[]): Promise<void> {
+  async saveAll(actEli: string, events: ChangeEvent[]): Promise<void> {
+    if (!this._events.has(actEli)) {
+      this._events.set(actEli, new Map());
+    }
     for (const ev of events) {
-      const actEli = this._resolveActEli(ev);
-      if (!this._events.has(actEli)) {
-        this._events.set(actEli, new Map());
-      }
       this._events.get(actEli)!.set(ev.eventHash, ev);
     }
-  }
-
-  private _resolveActEli(ev: ChangeEvent): string {
-    if ("path" in ev) return ev.path.split("/")[0] ?? "";
-    if ("fromPath" in ev) return ev.fromPath.split("/")[0] ?? "";
-    if ("tjEli" in ev) return ev.tjEli;
-    if ("by" in ev) return ev.by;
-    if ("unitPath" in ev) return ev.unitPath.split("/")[0] ?? "";
-    return "";
   }
 }
 

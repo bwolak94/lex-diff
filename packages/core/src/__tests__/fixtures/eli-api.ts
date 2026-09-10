@@ -27,48 +27,26 @@ export const actMetadataNoTextFixture = {
   textHTML: false,
 };
 
-export const actStructFixture = {
-  eli: ACT_ELI,
-  content: [
-    {
-      type: "art",
-      num: "1",
-      children: [
-        {
-          type: "ustep",
-          num: "1",
-          children: [],
-        },
-        {
-          type: "ustep",
-          num: "2",
-          children: [],
-        },
-      ],
-    },
-    {
-      type: "art",
-      num: "2",
-      children: [
-        {
-          type: "punkt",
-          num: "1",
-          children: [],
-        },
-        {
-          type: "punkt",
-          num: "2",
-          children: [],
-        },
-      ],
-    },
-    {
-      type: "art",
-      num: "3",
-      children: [],
-    },
-  ],
-};
+// The real ELI API returns a bare array of struct nodes (not wrapped in an object)
+export const actStructFixture = [
+  {
+    type: "art",
+    num: "1",
+    children: [
+      { type: "ustep", num: "1", children: [] },
+      { type: "ustep", num: "2", children: [] },
+    ],
+  },
+  {
+    type: "art",
+    num: "2",
+    children: [
+      { type: "punkt", num: "1", children: [] },
+      { type: "punkt", num: "2", children: [] },
+    ],
+  },
+  { type: "art", num: "3", children: [] },
+];
 
 export const unitTextFixtures: Record<string, string> = {
   "art=1/ustep=1": "<p>Ustawa reguluje zasady testowania oprogramowania.</p>",

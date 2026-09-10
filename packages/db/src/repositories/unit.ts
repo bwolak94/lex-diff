@@ -35,10 +35,15 @@ export class DrizzleUnitRepository implements UnitRepository {
   async saveAll(eli: string, unitList: Unit[]): Promise<void> {
     if (unitList.length === 0) return;
 
+    // Deduplicate by path — last write wins (keeps text if available)
+    const seen = new Map<string, Unit>();
+    for (const u of unitList) seen.set(u.path, u);
+    const deduped = [...seen.values()];
+
     await this.db
       .insert(units)
       .values(
-        unitList.map((u) => ({
+        deduped.map((u) => ({
           actVersionEli: eli,
           path: u.path,
           kind: u.kind,

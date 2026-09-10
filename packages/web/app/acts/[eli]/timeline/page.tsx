@@ -15,7 +15,8 @@ export default function TimelinePage({
 }: {
   params: Promise<{ eli: string }>;
 }) {
-  const { eli } = use(params);
+  const { eli: rawEli } = use(params);
+  const eli = decodeURIComponent(rawEli);
 
   const { data } = useQuery({
     queryKey: ["timeline", eli.replace(/:/g, "/")],

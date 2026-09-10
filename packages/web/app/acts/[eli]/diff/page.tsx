@@ -58,7 +58,8 @@ export default function DiffPage({
 }: {
   params: Promise<{ eli: string }>;
 }) {
-  const { eli } = use(params);
+  const { eli: rawEli } = use(params);
+  const eli = decodeURIComponent(rawEli);
 
   return (
     <Suspense fallback={<DiffFallback />}>

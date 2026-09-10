@@ -19,23 +19,27 @@ export const UNIT_KINDS = [
 
 export const UnitKindSchema = z.enum(UNIT_KINDS);
 
-// Recursive struct node — z.lazy() required for self-referential schema
+// Recursive struct node — the ELI API returns nodes with `type` (any string)
+// and `name` as the unit number. We normalise to `num` for internal use.
 export interface EliStructNode {
-  type: (typeof UNIT_KINDS)[number];
+  type: string;
   num: string;
   children: EliStructNode[];
 }
 
 export const EliStructNodeSchema: z.ZodType<EliStructNode> = z.object({
-  type: UnitKindSchema,
-  num: z.string(),
-  children: z.lazy(() => z.array(EliStructNodeSchema)),
-});
+  type: z.string(),
+  num: z.string().optional(),
+  name: z.string().optional(),
+  children: z.lazy(() => z.array(EliStructNodeSchema).default([])),
+}).transform(({ type, num, name, children }) => ({
+  type,
+  num: num ?? name ?? "",
+  children,
+})) as unknown as z.ZodType<EliStructNode>;
 
-export const EliActStructResponseSchema = z.object({
-  eli: z.string(),
-  content: z.array(EliStructNodeSchema),
-});
+// The ELI API /struct endpoint returns a bare array of nodes.
+export const EliActStructResponseSchema = z.array(EliStructNodeSchema);
 
 export const EliActMetadataResponseSchema = z.object({
   ELI: z.string(),
@@ -45,17 +49,20 @@ export const EliActMetadataResponseSchema = z.object({
   title: z.string(),
   type: z.string(),
   status: z.string(),
-  inForce: z.boolean(),
+  inForce: z
+    .union([z.boolean(), z.string()])
+    .transform((v) => v === true || v === "True" || v === "IN_FORCE" || v === "PARTIALLY_IN_FORCE"),
   announcementDate: z.string().nullish(),
   entryIntoForce: z.string().nullish(),
   repealDate: z.string().nullish(),
   changeDate: z.string().nullish(),
-  textHTML: z.boolean(),
+  textHTML: z.union([z.boolean(), z.string()]).transform((v) => v === true || v === "True"),
   keywords: z.array(z.string()).default([]),
   texts: z
     .array(
       z.object({
-        kind: z.string(),
+        kind: z.string().optional(),
+        fileName: z.string().optional(),
         url: z.string().optional(),
         type: z.string().optional(),
       }),
@@ -80,5 +87,5 @@ export const EliChangedActsResponseSchema = z.object({
 
 // Derived TypeScript types
 export type EliActMetadataResponse = z.infer<typeof EliActMetadataResponseSchema>;
-export type EliActStructResponse = z.infer<typeof EliActStructResponseSchema>;
+export type EliActStructResponse = EliStructNode[]; // bare array from API
 export type EliChangedActsResponse = z.infer<typeof EliChangedActsResponseSchema>;
