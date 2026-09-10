@@ -3,6 +3,7 @@ import {
   EliActMetadataResponseSchema,
   EliActStructResponseSchema,
   EliChangedActsResponseSchema,
+  EliSearchResponseSchema,
   type EliActStructResponse,
 } from "./schemas.js";
 import { withSpan } from "./tracer.js";
@@ -153,6 +154,56 @@ export class EliClient {
         `acts/${publisher}/${year}/${position}/text.html/${cleanPath}`,
       );
     }, { "eli": eli, "unitPath": unitPath });
+  }
+
+  /**
+   * GET /acts/search?title=&type[]=&publisher=&year=&statusInForce=&limit=&offset=
+   * Full-corpus search against the ELI API (164 k acts).
+   */
+  async searchActs(params: {
+    title?: string;
+    type?: string;
+    publisher?: string;
+    year?: number;
+    inForce?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ items: ActMetadata[]; totalCount: number }> {
+    return withSpan("EliClient.searchActs", async () => {
+      const qs = new URLSearchParams();
+      if (params.title) qs.set("title", params.title);
+      if (params.type) qs.append("type[]", params.type);
+      if (params.publisher) qs.set("publisher", params.publisher);
+      if (params.year) qs.set("year", String(params.year));
+      if (params.inForce) qs.set("statusInForce", "true");
+      qs.set("limit", String(params.limit ?? 20));
+      qs.set("offset", String(params.offset ?? 0));
+
+      const raw = await this.fetchJson(
+        `acts/search?${qs.toString()}`,
+        (json) => EliSearchResponseSchema.parse(json),
+      );
+
+      return {
+        totalCount: raw.totalCount,
+        items: raw.items.map((item) => ({
+          eli: item.ELI,
+          publisher: item.publisher,
+          year: item.year,
+          position: item.pos,
+          title: item.title,
+          type: item.type,
+          status: item.status,
+          inForce: item.inForce,
+          announcementDate: item.announcementDate ?? null,
+          entryIntoForce: item.entryIntoForce ?? null,
+          repealDate: item.repealDate ?? null,
+          changeDate: item.changeDate ?? null,
+          textHTML: item.textHTML,
+          keywords: item.keywords,
+        })),
+      };
+    }, { title: params.title ?? "", limit: params.limit ?? 20, offset: params.offset ?? 0 });
   }
 
   /**

@@ -85,7 +85,15 @@ export const EliChangedActsResponseSchema = z.object({
   items: z.array(EliChangedActItemSchema),
 });
 
+export const EliSearchResponseSchema = z.object({
+  count: z.number().int(),
+  offset: z.number().int(),
+  totalCount: z.number().int(),
+  items: z.array(EliActMetadataResponseSchema),
+});
+
 // Derived TypeScript types
 export type EliActMetadataResponse = z.infer<typeof EliActMetadataResponseSchema>;
 export type EliActStructResponse = EliStructNode[]; // bare array from API
 export type EliChangedActsResponse = z.infer<typeof EliChangedActsResponseSchema>;
+export type EliSearchResponse = z.infer<typeof EliSearchResponseSchema>;

@@ -72,8 +72,8 @@ export interface ChangeEvent {
 
 // ── API functions ─────────────────────────────────────────────────────────────
 
-export function fetchAct(eli: string): Promise<ActMetadata> {
-  return apiFetch<ActMetadata>(`/acts/${encodeURIComponent(eli)}`);
+export function fetchAct(eli: string): Promise<ActMetadata & { isLocal: boolean }> {
+  return apiFetch<ActMetadata & { isLocal: boolean }>(`/acts/${encodeURIComponent(eli)}`);
 }
 
 export function fetchActVersions(eli: string): Promise<string[]> {
@@ -118,6 +118,36 @@ export function searchActs(query: {
   if (query.type) params.set("type", query.type);
   const qs = params.toString();
   return apiFetch<ActMetadata[]>(`/acts/search${qs ? `?${qs}` : ""}`);
+}
+
+export interface ActMetadataWithLocal extends ActMetadata {
+  isLocal: boolean;
+}
+
+export interface EliSearchResult {
+  totalCount: number;
+  items: ActMetadataWithLocal[];
+}
+
+export function searchEliActs(query: {
+  q?: string;
+  type?: string;
+  publisher?: string;
+  year?: number;
+  inForce?: boolean;
+  limit?: number;
+  offset?: number;
+}): Promise<EliSearchResult> {
+  const params = new URLSearchParams();
+  if (query.q) params.set("q", query.q);
+  if (query.type) params.set("type", query.type);
+  if (query.publisher) params.set("publisher", query.publisher);
+  if (query.year) params.set("year", String(query.year));
+  if (query.inForce) params.set("inForce", "true");
+  if (query.limit) params.set("limit", String(query.limit));
+  if (query.offset) params.set("offset", String(query.offset));
+  const qs = params.toString();
+  return apiFetch<EliSearchResult>(`/acts/eli-search${qs ? `?${qs}` : ""}`);
 }
 
 // ── Subscriptions ─────────────────────────────────────────────────────────────

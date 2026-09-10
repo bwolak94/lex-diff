@@ -10,7 +10,7 @@ import {
 } from "fastify-type-provider-zod";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { DiffEngine } from "@lexdiff/core";
+import { DiffEngine, EliClient } from "@lexdiff/core";
 import type {
   ActRepository,
   UnitRepository,
@@ -72,6 +72,16 @@ const SearchQuerySchema = z.object({
   type: z.string().optional(),
 });
 
+const EliSearchQuerySchema = z.object({
+  q: z.string().optional(),
+  type: z.string().optional(),
+  publisher: z.string().optional(),
+  year: z.coerce.number().int().optional(),
+  inForce: z.enum(["true", "false"]).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
 const ErrorSchema = z.object({ error: z.string() });
 
 // ── App factory ───────────────────────────────────────────────────────────────
@@ -118,7 +128,7 @@ export interface AppRepositories {
   users: UserRepository;
 }
 
-export function buildApp(repos: AppRepositories) {
+export function buildApp(repos: AppRepositories, injectedEliClient?: EliClient) {
   const app = Fastify({ logger: false });
 
   app.setValidatorCompiler(validatorCompiler);
@@ -146,6 +156,9 @@ export function buildApp(repos: AppRepositories) {
   });
 
   const engine = new DiffEngine();
+  const eliClient = injectedEliClient ?? new EliClient({
+    requestsPerSecond: Number(process.env["ELI_REQUESTS_PER_SECOND"] ?? 5),
+  });
   const typed = app.withTypeProvider<ZodTypeProvider>();
 
   // ── GET /health ──────────────────────────────────────────────────────────────
@@ -221,6 +234,44 @@ export function buildApp(repos: AppRepositories) {
     },
   );
 
+  // ── GET /acts/eli-search — live proxy to the ELI API (full 164k corpus) ────────
+  typed.get(
+    "/acts/eli-search",
+    {
+      schema: {
+        querystring: EliSearchQuerySchema,
+        response: {
+          200: z.object({
+            totalCount: z.number(),
+            items: z.array(ActMetadataSchema.extend({ isLocal: z.boolean() })),
+          }),
+        },
+      },
+    },
+    async (req) => {
+      const { q, type, publisher, year, inForce, limit, offset } = req.query;
+
+      const { items, totalCount } = await eliClient.searchActs({
+        ...(q ? { title: q } : {}),
+        ...(type ? { type } : {}),
+        ...(publisher ? { publisher } : {}),
+        ...(year !== undefined ? { year } : {}),
+        ...(inForce === "true" ? { inForce: true } : {}),
+        limit,
+        offset,
+      });
+
+      // Single DB query to check which ELIs are stored locally
+      const localActs = await repos.acts.search({});
+      const localElis = new Set(localActs.map((a) => a.eli));
+
+      return {
+        totalCount,
+        items: items.map((act) => ({ ...act, isLocal: localElis.has(act.eli) })),
+      };
+    },
+  );
+
   // ── GET /acts/:eli ────────────────────────────────────────────────────────────
   typed.get(
     "/acts/:eli",
@@ -228,7 +279,7 @@ export function buildApp(repos: AppRepositories) {
       schema: {
         params: EliParamSchema,
         response: {
-          200: ActMetadataSchema,
+          200: ActMetadataSchema.extend({ isLocal: z.boolean() }),
           404: ErrorSchema,
         },
       },
@@ -236,8 +287,14 @@ export function buildApp(repos: AppRepositories) {
     async (req, rep) => {
       const internalEli = req.params.eli.replace(/:/g, "/");
       const meta = await repos.acts.findByEli(internalEli);
-      if (!meta) return rep.code(404).send({ error: "Act not found" });
-      return meta;
+      if (meta) return { ...meta, isLocal: true };
+
+      // Not in local DB — fall back to ELI API (covers "Metadata only" acts)
+      try {
+        return { ...(await eliClient.getAct(internalEli)), isLocal: false };
+      } catch {
+        return rep.code(404).send({ error: "Act not found" });
+      }
     },
   );
 
