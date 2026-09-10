@@ -9,7 +9,12 @@ import {
   InMemoryActReferenceRepository,
   InMemoryUserRepository,
 } from "@lexdiff/db";
+import { EliClient } from "@lexdiff/core";
 import type { ActMetadata } from "@lexdiff/core";
+
+// EliClient pointed at a non-existent address so the ELI fallback always fails
+// in tests — prevents real network calls and keeps 404 behaviour testable.
+const stubEliClient = new EliClient({ baseUrl: "http://localhost:1" });
 
 // ── Fixture ───────────────────────────────────────────────────────────────────
 
@@ -44,7 +49,7 @@ function makeRepos() {
 
 describe("GET /health", () => {
   it("returns 200 { status: ok }", async () => {
-    const app = buildApp(makeRepos());
+    const app = buildApp(makeRepos(), stubEliClient);
     const res = await app.inject({ method: "GET", url: "/health" });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ status: "ok" });
@@ -53,7 +58,7 @@ describe("GET /health", () => {
 
 describe("GET /acts/search", () => {
   it("returns empty array when no acts stored", async () => {
-    const app = buildApp(makeRepos());
+    const app = buildApp(makeRepos(), stubEliClient);
     const res = await app.inject({ method: "GET", url: "/acts/search" });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual([]);
@@ -62,7 +67,7 @@ describe("GET /acts/search", () => {
   it("filters by q (title substring)", async () => {
     const repos = makeRepos();
     await repos.acts.save(SAMPLE_ACT);
-    const app = buildApp(repos);
+    const app = buildApp(repos, stubEliClient);
 
     const found = await app.inject({
       method: "GET",
@@ -82,7 +87,7 @@ describe("GET /acts/search", () => {
   it("filters by keyword", async () => {
     const repos = makeRepos();
     await repos.acts.save(SAMPLE_ACT);
-    const app = buildApp(repos);
+    const app = buildApp(repos, stubEliClient);
 
     const res = await app.inject({
       method: "GET",
@@ -95,7 +100,7 @@ describe("GET /acts/search", () => {
   it("filters by type", async () => {
     const repos = makeRepos();
     await repos.acts.save(SAMPLE_ACT);
-    const app = buildApp(repos);
+    const app = buildApp(repos, stubEliClient);
 
     const found = await app.inject({
       method: "GET",
@@ -115,7 +120,7 @@ describe("GET /acts/search", () => {
 
 describe("GET /acts/:eli", () => {
   it("returns 404 when act not found", async () => {
-    const app = buildApp(makeRepos());
+    const app = buildApp(makeRepos(), stubEliClient);
     const res = await app.inject({
       method: "GET",
       url: "/acts/DU:2017:2196",
@@ -127,7 +132,7 @@ describe("GET /acts/:eli", () => {
   it("returns act metadata (colon ELI → slash conversion)", async () => {
     const repos = makeRepos();
     await repos.acts.save(SAMPLE_ACT);
-    const app = buildApp(repos);
+    const app = buildApp(repos, stubEliClient);
 
     const res = await app.inject({
       method: "GET",
@@ -142,7 +147,7 @@ describe("GET /acts/:eli", () => {
 
 describe("GET /acts/:eli/versions", () => {
   it("returns 404 when act not found", async () => {
-    const app = buildApp(makeRepos());
+    const app = buildApp(makeRepos(), stubEliClient);
     const res = await app.inject({
       method: "GET",
       url: "/acts/DU:2017:2196/versions",
@@ -153,7 +158,7 @@ describe("GET /acts/:eli/versions", () => {
   it("returns list of version ELIs", async () => {
     const repos = makeRepos();
     await repos.acts.save(SAMPLE_ACT);
-    const app = buildApp(repos);
+    const app = buildApp(repos, stubEliClient);
 
     const res = await app.inject({
       method: "GET",
@@ -166,7 +171,7 @@ describe("GET /acts/:eli/versions", () => {
 
 describe("GET /acts/:eli/diff", () => {
   it("returns 400 when from/to missing", async () => {
-    const app = buildApp(makeRepos());
+    const app = buildApp(makeRepos(), stubEliClient);
     const res = await app.inject({
       method: "GET",
       url: "/acts/DU:2017:2196/diff",
@@ -177,7 +182,7 @@ describe("GET /acts/:eli/diff", () => {
   it("returns 404 when no units for given versions", async () => {
     const repos = makeRepos();
     await repos.acts.save(SAMPLE_ACT);
-    const app = buildApp(repos);
+    const app = buildApp(repos, stubEliClient);
 
     const res = await app.inject({
       method: "GET",
@@ -212,7 +217,7 @@ describe("GET /acts/:eli/diff", () => {
         textHash: h("modified text of the article with changes"),
       },
     ]);
-    const app = buildApp(repos);
+    const app = buildApp(repos, stubEliClient);
 
     const res = await app.inject({
       method: "GET",
@@ -227,7 +232,7 @@ describe("GET /acts/:eli/diff", () => {
 
 describe("GET /acts/:eli/timeline", () => {
   it("returns empty events for unknown act", async () => {
-    const app = buildApp(makeRepos());
+    const app = buildApp(makeRepos(), stubEliClient);
     const res = await app.inject({
       method: "GET",
       url: "/acts/DU:2017:2196/timeline",
@@ -239,7 +244,7 @@ describe("GET /acts/:eli/timeline", () => {
 
 describe("POST /subscriptions", () => {
   it("creates a subscription and returns 201", async () => {
-    const app = buildApp(makeRepos());
+    const app = buildApp(makeRepos(), stubEliClient);
     const res = await app.inject({
       method: "POST",
       url: "/subscriptions",
@@ -253,7 +258,7 @@ describe("POST /subscriptions", () => {
   });
 
   it("returns 400 on invalid email", async () => {
-    const app = buildApp(makeRepos());
+    const app = buildApp(makeRepos(), stubEliClient);
     const res = await app.inject({
       method: "POST",
       url: "/subscriptions",
@@ -268,7 +273,7 @@ describe("GET /subscriptions", () => {
     const repos = makeRepos();
     await repos.subscriptions.save({ actEli: "DU/2024/1", email: "a@a.com", webhookUrl: null });
     await repos.subscriptions.save({ actEli: "DU/2024/2", email: "b@b.com", webhookUrl: null });
-    const app = buildApp(repos);
+    const app = buildApp(repos, stubEliClient);
     const res = await app.inject({ method: "GET", url: "/subscriptions" });
     expect(res.statusCode).toBe(200);
     expect((res.json() as unknown[]).length).toBe(2);
@@ -277,7 +282,7 @@ describe("GET /subscriptions", () => {
 
 describe("DELETE /subscriptions/:id", () => {
   it("returns 404 for unknown id", async () => {
-    const app = buildApp(makeRepos());
+    const app = buildApp(makeRepos(), stubEliClient);
     const res = await app.inject({
       method: "DELETE",
       url: "/subscriptions/00000000-0000-0000-0000-000000000000",
@@ -292,7 +297,7 @@ describe("DELETE /subscriptions/:id", () => {
       email: "user@example.com",
       webhookUrl: null,
     });
-    const app = buildApp(repos);
+    const app = buildApp(repos, stubEliClient);
     const res = await app.inject({
       method: "DELETE",
       url: `/subscriptions/${sub.id}`,

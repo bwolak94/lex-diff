@@ -128,7 +128,7 @@ export interface AppRepositories {
   users: UserRepository;
 }
 
-export function buildApp(repos: AppRepositories) {
+export function buildApp(repos: AppRepositories, injectedEliClient?: EliClient) {
   const app = Fastify({ logger: false });
 
   app.setValidatorCompiler(validatorCompiler);
@@ -156,7 +156,7 @@ export function buildApp(repos: AppRepositories) {
   });
 
   const engine = new DiffEngine();
-  const eliClient = new EliClient({
+  const eliClient = injectedEliClient ?? new EliClient({
     requestsPerSecond: Number(process.env["ELI_REQUESTS_PER_SECOND"] ?? 5),
   });
   const typed = app.withTypeProvider<ZodTypeProvider>();
