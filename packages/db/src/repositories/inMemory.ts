@@ -34,6 +34,10 @@ export class InMemoryActRepository implements ActRepository {
     this._acts.set(meta.eli, meta);
   }
 
+  async deleteByEli(eli: string): Promise<void> {
+    this._acts.delete(eli);
+  }
+
   async search(q: {
     q?: string;
     keyword?: string;

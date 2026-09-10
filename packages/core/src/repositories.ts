@@ -16,6 +16,8 @@ export interface ActRepository {
   listVersionElis(eli: string): Promise<string[]>;
   save(meta: ActMetadata): Promise<void>;
   search(q: { q?: string; keyword?: string; type?: string }): Promise<ActMetadata[]>;
+  /** Remove an act and all related versions, units, and change events. */
+  deleteByEli(eli: string): Promise<void>;
 }
 
 export interface UnitRepository {

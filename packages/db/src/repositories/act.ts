@@ -1,8 +1,8 @@
-import { eq, ilike, and, sql } from "drizzle-orm";
+import { eq, ilike, and, sql, inArray } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { ActMetadata } from "@lexdiff/core";
 import type { ActRepository } from "@lexdiff/core";
-import { acts, actVersions } from "../schema/index.js";
+import { acts, actVersions, units, changeEvents } from "../schema/index.js";
 import type * as schema from "../schema/index.js";
 
 type DB = NodePgDatabase<typeof schema>;
@@ -78,6 +78,20 @@ export class DrizzleActRepository implements ActRepository {
           keywords: meta.keywords,
         },
       });
+  }
+
+  async deleteByEli(eli: string): Promise<void> {
+    const versions = await this.db
+      .select({ eli: actVersions.eli })
+      .from(actVersions)
+      .where(eq(actVersions.actEli, eli));
+    const versionElis = versions.map((v) => v.eli);
+    if (versionElis.length > 0) {
+      await this.db.delete(units).where(inArray(units.actVersionEli, versionElis));
+    }
+    await this.db.delete(changeEvents).where(eq(changeEvents.actEli, eli));
+    await this.db.delete(actVersions).where(eq(actVersions.actEli, eli));
+    await this.db.delete(acts).where(eq(acts.eli, eli));
   }
 
   async search(q: {
