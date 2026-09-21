@@ -23,15 +23,18 @@ const EVENT_LABELS: Partial<Record<string, string>> = {
 
 /**
  * Generate a PDF buffer for the given act's change timeline.
+ * Returns a Promise because PDFKit flushes data asynchronously via stream events.
  */
 export function generateTimelinePdf(
   actEli: string,
   events: ChangeEvent[],
-): Buffer {
-  const chunks: Buffer[] = [];
-  const doc = new PDFDocument({ margin: 50, size: "A4" });
+): Promise<Buffer> {
+  return new Promise((resolve) => {
+    const chunks: Buffer[] = [];
+    const doc = new PDFDocument({ margin: 50, size: "A4" });
 
-  doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
 
   // ── Header ────────────────────────────────────────────────────────────────
   doc
@@ -92,6 +95,6 @@ export function generateTimelinePdf(
     if (doc.y > 750) doc.addPage();
   }
 
-  doc.end();
-  return Buffer.concat(chunks);
+    doc.end();
+  });
 }

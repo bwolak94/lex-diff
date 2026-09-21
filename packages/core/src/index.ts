@@ -15,6 +15,8 @@ export { apply } from "./apply.js";
 export { withSpan, withSpanSync, getTracer } from "./tracer.js";
 export { extractPdfText } from "./pdfExtractor.js";
 export type { PdfTextResult } from "./pdfExtractor.js";
+export { extractReferences } from "./referenceExtractor.js";
+export type { ExtractedReference } from "./referenceExtractor.js";
 export type {
   ActRepository,
   UnitRepository,

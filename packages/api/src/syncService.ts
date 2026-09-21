@@ -1,11 +1,12 @@
 // ActSyncService: fetches latest act data from ELI API, diffs against stored
 // version, and persists change events. Used by the cron scheduler.
 
-import { EliClient, ActParser, DiffEngine } from "@lexdiff/core";
+import { EliClient, ActParser, DiffEngine, extractReferences } from "@lexdiff/core";
 import type {
   ActRepository,
   UnitRepository,
   ChangeEventRepository,
+  ActReferenceRepository,
 } from "@lexdiff/core";
 import { db, schema } from "@lexdiff/db";
 
@@ -18,6 +19,7 @@ export class ActSyncService {
     private readonly actRepo: ActRepository,
     private readonly unitRepo: UnitRepository,
     private readonly changeEventRepo: ChangeEventRepository,
+    private readonly referenceRepo?: ActReferenceRepository,
   ) {}
 
   /**
@@ -64,6 +66,19 @@ export class ActSyncService {
     // Parse structural units (+ text if available via textHTML)
     const newUnits = await this.parser.parse(eli, meta.textHTML);
     await this.unitRepo.saveAll(newVersionEli, newUnits);
+
+    // B-2: Extract and persist cross-act references on first sync
+    if (isFirstSync && this.referenceRepo) {
+      const unitTexts = newUnits
+        .filter((u) => u.text !== null)
+        .map((u) => u.text!);
+      const extracted = extractReferences(eli, meta.title, unitTexts);
+      if (extracted.length > 0) {
+        await this.referenceRepo.saveAll(
+          extracted.map((r) => ({ sourceEli: eli, ...r })),
+        );
+      }
+    }
 
     // Diff against the immediately preceding version
     if (!isFirstSync) {

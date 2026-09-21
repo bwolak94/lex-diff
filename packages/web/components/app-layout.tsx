@@ -4,8 +4,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Scale, Search, Clock, GitCompare, Bell, Database } from "lucide-react";
+import { Scale, Search, Clock, GitCompare, Bell, Database, GitFork, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const API_BASE = process.env["NEXT_PUBLIC_API_URL"] ?? "http://localhost:3001";
 
 function Header() {
   return (
@@ -89,6 +91,26 @@ function Sidebar({ eli }: { eli?: string }) {
               <GitCompare size={16} />
               Diff
             </Link>
+            <Link
+              href={`/acts/${eli}/references`}
+              className={cn(
+                "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+                pathname.endsWith("/references")
+                  ? "bg-blue-50 text-blue-700 font-medium"
+                  : "text-slate-600 hover:bg-slate-50",
+              )}
+            >
+              <GitFork size={16} />
+              References
+            </Link>
+            <a
+              href={`${API_BASE}/acts/${encodeURIComponent(eli.replace(/:/g, "/"))}/timeline.pdf`}
+              download
+              className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-50"
+            >
+              <Download size={16} />
+              Export PDF
+            </a>
           </>
         )}
       </nav>

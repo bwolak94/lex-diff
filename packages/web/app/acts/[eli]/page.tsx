@@ -12,7 +12,7 @@ import { VacatioLegis } from "@/components/vacatio-legis";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Clock, GitCompare, ExternalLink, Bell } from "lucide-react";
+import { Clock, GitCompare, ExternalLink, Bell, GitFork } from "lucide-react";
 
 function ActDetailSkeleton() {
   return (
@@ -145,6 +145,13 @@ export default function ActDetailPage({
                     Timeline and diff are available only for locally imported acts.
                   </p>
                 )}
+                <Link
+                  href={`/acts/${eli}/references`}
+                  className="inline-flex items-center rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                >
+                  <GitFork size={16} className="mr-2" />
+                  References
+                </Link>
                 <Link
                   href={`/subscriptions?actEli=${encodeURIComponent(eli)}`}
                   className="inline-flex items-center rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
