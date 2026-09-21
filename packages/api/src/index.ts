@@ -590,6 +590,7 @@ export function buildApp(repos: AppRepositories, injectedEliClient?: EliClient) 
         repos.acts,
         repos.units,
         repos.changeEvents,
+        repos.references,
       );
       try {
         const result = await syncService.syncAct(rawEli);
@@ -621,6 +622,7 @@ export function buildApp(repos: AppRepositories, injectedEliClient?: EliClient) 
         repos.acts,
         repos.units,
         repos.changeEvents,
+        repos.references,
       );
       try {
         const result = await syncService.syncAct(internalEli);
