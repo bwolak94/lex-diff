@@ -418,7 +418,7 @@ export function buildApp(repos: AppRepositories, injectedEliClient?: EliClient) 
         if (!b.effectiveDate) return -1;
         return a.effectiveDate < b.effectiveDate ? -1 : 1;
       });
-      const pdf = generateTimelinePdf(internalEli, events);
+      const pdf = await generateTimelinePdf(internalEli, events);
       rep.header("Content-Type", "application/pdf");
       rep.header(
         "Content-Disposition",

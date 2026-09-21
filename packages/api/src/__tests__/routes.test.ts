@@ -307,6 +307,158 @@ describe("DELETE /subscriptions/:id", () => {
   });
 });
 
+// ── B-2: GET /acts/:eli/references ───────────────────────────────────────────
+
+describe("GET /acts/:eli/references", () => {
+  it("returns empty outgoing and incoming arrays when no refs stored", async () => {
+    const repos = makeRepos();
+    await repos.acts.save(SAMPLE_ACT);
+    const app = buildApp(repos, stubEliClient);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/acts/DU:2017:2196/references",
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ outgoing: [], incoming: [] });
+  });
+
+  it("returns outgoing references for the act", async () => {
+    const repos = makeRepos();
+    await repos.acts.save(SAMPLE_ACT);
+    await repos.references.saveAll([
+      { sourceEli: "DU/2017/2196", targetEli: "DU/2010/500", referenceType: "amends" },
+    ]);
+    const app = buildApp(repos, stubEliClient);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/acts/DU:2017:2196/references",
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ outgoing: unknown[]; incoming: unknown[] }>();
+    expect(body.outgoing).toHaveLength(1);
+    expect(body.incoming).toHaveLength(0);
+    expect((body.outgoing[0] as Record<string, unknown>)["targetEli"]).toBe("DU/2010/500");
+    expect((body.outgoing[0] as Record<string, unknown>)["referenceType"]).toBe("amends");
+  });
+
+  it("returns incoming references for the act", async () => {
+    const repos = makeRepos();
+    await repos.acts.save(SAMPLE_ACT);
+    await repos.references.saveAll([
+      { sourceEli: "DU/2024/1", targetEli: "DU/2017/2196", referenceType: "repeals" },
+    ]);
+    const app = buildApp(repos, stubEliClient);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/acts/DU:2017:2196/references",
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ outgoing: unknown[]; incoming: unknown[] }>();
+    expect(body.outgoing).toHaveLength(0);
+    expect(body.incoming).toHaveLength(1);
+    expect((body.incoming[0] as Record<string, unknown>)["sourceEli"]).toBe("DU/2024/1");
+  });
+
+  it("colon-separated ELI in URL is normalised to slash-separated for lookup", async () => {
+    const repos = makeRepos();
+    await repos.acts.save(SAMPLE_ACT);
+    await repos.references.saveAll([
+      { sourceEli: "DU/2017/2196", targetEli: "DU/2019/100", referenceType: "implements" },
+    ]);
+    const app = buildApp(repos, stubEliClient);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/acts/DU:2017:2196/references",
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ outgoing: unknown[]; incoming: unknown[] }>();
+    expect(body.outgoing).toHaveLength(1);
+  });
+});
+
+// ── B-3: GET /acts/:eli/timeline.pdf ─────────────────────────────────────────
+
+describe("GET /acts/:eli/timeline.pdf", () => {
+  it("returns 200 with application/pdf content-type", async () => {
+    const repos = makeRepos();
+    await repos.acts.save(SAMPLE_ACT);
+    const app = buildApp(repos, stubEliClient);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/acts/DU:2017:2196/timeline.pdf",
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toContain("application/pdf");
+  });
+
+  it("sets Content-Disposition attachment with act ELI in filename", async () => {
+    const repos = makeRepos();
+    await repos.acts.save(SAMPLE_ACT);
+    const app = buildApp(repos, stubEliClient);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/acts/DU:2017:2196/timeline.pdf",
+    });
+    const cd = res.headers["content-disposition"] as string;
+    expect(cd).toContain("attachment");
+    expect(cd).toContain("DU-2017-2196");
+  });
+
+  it("returns non-empty PDF bytes", async () => {
+    const repos = makeRepos();
+    await repos.acts.save(SAMPLE_ACT);
+    const app = buildApp(repos, stubEliClient);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/acts/DU:2017:2196/timeline.pdf",
+    });
+    expect(res.rawPayload.length).toBeGreaterThan(0);
+    // PDF files start with the %PDF magic header
+    expect(res.rawPayload.subarray(0, 4).toString()).toBe("%PDF");
+  });
+
+  it("includes events in the PDF (larger payload when events present)", async () => {
+    const repos = makeRepos();
+    await repos.acts.save(SAMPLE_ACT);
+    const app = buildApp(repos, stubEliClient);
+
+    const emptyRes = await app.inject({
+      method: "GET",
+      url: "/acts/DU:2017:2196/timeline.pdf",
+    });
+
+    // Add an event then re-request
+    const hash = createHash("sha256").update("test-event").digest("hex");
+    await repos.changeEvents.saveAll("DU/2017/2196", [
+      {
+        type: "UnitAmended",
+        eventHash: hash,
+        severity: "high",
+        effectiveDate: "2024-01-01",
+        path: "art=1",
+        before: "old",
+        after: "new",
+        wordDiff: [{ type: "equal", text: "text" }],
+      },
+    ]);
+
+    const withEventRes = await app.inject({
+      method: "GET",
+      url: "/acts/DU:2017:2196/timeline.pdf",
+    });
+    expect(withEventRes.rawPayload.length).toBeGreaterThan(
+      emptyRes.rawPayload.length,
+    );
+  });
+});
+
 // ── S3-16: Integration tests guarded by DATABASE_URL ─────────────────────────
 
 describe.skipIf(!process.env["DATABASE_URL"])(
