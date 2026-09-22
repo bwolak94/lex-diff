@@ -9,6 +9,11 @@ import type {
   ActReferenceRepository,
 } from "@lexdiff/core";
 import { db, schema } from "@lexdiff/db";
+import {
+  unmatchedRatioHistogram,
+  syncDurationHistogram,
+  changeEventsGeneratedCounter,
+} from "./metrics.js";
 
 const engine = new DiffEngine();
 
@@ -30,6 +35,7 @@ export class ActSyncService {
    * 4. If a previous version exists → run DiffEngine and save change events.
    */
   async syncAct(eli: string): Promise<{ newEvents: number }> {
+    const stopTimer = syncDurationHistogram.startTimer();
     const meta = await this.client.getAct(eli);
     const existing = await this.actRepo.findByEli(eli);
     const versionElis = await this.actRepo.listVersionElis(eli);
@@ -40,6 +46,7 @@ export class ActSyncService {
       existing.changeDate === meta.changeDate &&
       versionElis.length > 0
     ) {
+      stopTimer({ result: "skipped" });
       return { newEvents: 0 };
     }
 
@@ -89,12 +96,20 @@ export class ActSyncService {
         effectiveDate: meta.changeDate,
         isConsolidated: false,
       });
+      // S6-4/S6-6: Record unmatchedRatio (UnitRepealed = truly unmatched old units)
+      const unmatchedCount = events.filter((e) => e.type === "UnitRepealed").length;
+      const unmatchedRatio = oldUnits.length > 0 ? unmatchedCount / oldUnits.length : 0;
+      unmatchedRatioHistogram.observe({ actEli: eli }, unmatchedRatio);
+
       if (events.length > 0) {
         await this.changeEventRepo.saveAll(eli, events);
+        changeEventsGeneratedCounter.inc({ actEli: eli }, events.length);
       }
+      stopTimer({ result: "synced" });
       return { newEvents: events.length };
     }
 
+    stopTimer({ result: "synced" });
     return { newEvents: 0 };
   }
 }
