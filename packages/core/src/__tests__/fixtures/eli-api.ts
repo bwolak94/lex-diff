@@ -70,3 +70,66 @@ export const changedActsFixture = {
     },
   ],
 };
+
+// S6-10: Contract fixtures — edge-case API response shapes
+
+/** Act with inForce / textHTML sent as strings ("True") instead of booleans */
+export const actMetadataStringBoolFixture = {
+  ELI: ACT_ELI,
+  publisher: "DU",
+  year: 2017,
+  pos: 2196,
+  title: "Ustawa z dnia 14 marca 2017 r. o testach jednostkowych",
+  type: "Ustawa",
+  status: "obowiązujący",
+  inForce: "True",        // API sometimes returns a string
+  textHTML: "True",       // same
+  keywords: ["testy"],
+  texts: [],
+};
+
+/** Act with inForce as "IN_FORCE" (another real API variant) */
+export const actMetadataInForceStringFixture = {
+  ...actMetadataStringBoolFixture,
+  inForce: "IN_FORCE",
+};
+
+/** Act from M.P. (Monitor Polski) publisher */
+export const ACT_MP_ELI = "MP/2023/512";
+export const actMpFixture = {
+  ELI: ACT_MP_ELI,
+  publisher: "MP",
+  year: 2023,
+  pos: 512,
+  title: "Obwieszczenie Marszałka Sejmu z dnia 15 marca 2023 r.",
+  type: "Obwieszczenie",
+  status: "obowiązujący",
+  inForce: true,
+  textHTML: false,
+  keywords: [],
+  texts: [],
+};
+
+/** Struct nodes using `name` field instead of `num` (older ELI API variant) */
+export const actStructWithNameFixture = [
+  {
+    type: "art",
+    name: "1",          // `name` instead of `num`
+    children: [
+      { type: "ustep", name: "1", children: [] },
+    ],
+  },
+  {
+    type: "art",
+    name: "2",
+    children: [],
+  },
+];
+
+/** Search results fixture (for EliClient.searchActs) */
+export const searchResultsFixture = {
+  count: 1,
+  offset: 0,
+  totalCount: 1,
+  items: [actMetadataFixture],
+};
