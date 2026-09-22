@@ -2,7 +2,10 @@ import Fastify from "fastify";
 import fastifyCors from "@fastify/cors";
 import fastifySwagger from "@fastify/swagger";
 import fastifySwaggerUi from "@fastify/swagger-ui";
-import { registry } from "./metrics.js";
+import {
+  registry,
+  httpRequestDurationHistogram,
+} from "./metrics.js";
 import {
   serializerCompiler,
   validatorCompiler,
@@ -161,6 +164,19 @@ export function buildApp(repos: AppRepositories, injectedEliClient?: EliClient) 
     requestsPerSecond: Number(process.env["ELI_REQUESTS_PER_SECOND"] ?? 5),
   });
   const typed = app.withTypeProvider<ZodTypeProvider>();
+
+  // ── S6-6: HTTP request duration metric ───────────────────────────────────────
+  app.addHook("onResponse", (req, rep, done) => {
+    // Skip the /metrics scrape endpoint itself to avoid feedback loops
+    if (req.url !== "/metrics") {
+      const route = (req.routeOptions as { url?: string } | undefined)?.url ?? req.url;
+      httpRequestDurationHistogram.observe(
+        { method: req.method, route, status_code: String(rep.statusCode) },
+        rep.elapsedTime / 1000,
+      );
+    }
+    done();
+  });
 
   // ── GET /health ──────────────────────────────────────────────────────────────
   typed.get(

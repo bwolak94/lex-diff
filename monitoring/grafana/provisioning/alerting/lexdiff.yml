@@ -1,0 +1,186 @@
+# S6-6: Grafana unified alert rules — provisioned via file.
+# These mirror the Prometheus alert-rules.yml but run inside Grafana's
+# alert engine so they appear in the Grafana UI and can route to contact points.
+#
+# Reload without restart: POST http://localhost:3002/api/admin/provisioning/alerting/reload
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: LexDiff
+    folder: LexDiff
+    interval: 1m
+    rules:
+      # ── S6-6: unmatchedRatio alert ─────────────────────────────────────────
+      - uid: lexdiff-high-unmatched-ratio
+        title: HighUnmatchedRatio
+        condition: threshold
+        for: 5m
+        labels:
+          severity: warning
+          team: lexdiff
+        annotations:
+          summary: "DiffEngine unmatchedRatio p95 above threshold"
+          description: >
+            p95 of lexdiff_diff_unmatched_ratio is {{ $values.ratio.Value | humanize }}
+            over the last 10 minutes (threshold: 5 %).
+            This may indicate a structural change in the ELI API or a matching regression.
+            Check the DiffEngine spans in Jaeger for details.
+        data:
+          - refId: ratio
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 600
+              to: 0
+            model:
+              expr: >
+                histogram_quantile(0.95,
+                  rate(lexdiff_diff_unmatched_ratio_bucket[10m])
+                )
+              intervalMs: 60000
+              maxDataPoints: 43200
+          - refId: threshold
+            datasourceUid: "__expr__"
+            relativeTimeRange:
+              from: 600
+              to: 0
+            model:
+              type: threshold
+              refId: threshold
+              expression: ratio
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0.05]
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+        noDataState: OK
+        execErrState: Error
+        isPaused: false
+
+      # ── HTTP 5xx spike alert ───────────────────────────────────────────────
+      - uid: lexdiff-http-5xx-spike
+        title: HTTP5xxSpike
+        condition: threshold
+        for: 2m
+        labels:
+          severity: critical
+          team: lexdiff
+        annotations:
+          summary: "HTTP 5xx rate spike"
+          description: >
+            HTTP 5xx error rate is {{ $values.rate.Value | humanize }} req/s
+            over the last 5 minutes. Investigate API logs in Grafana Loki.
+        data:
+          - refId: rate
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 300
+              to: 0
+            model:
+              expr: >
+                rate(http_request_duration_seconds_count{status_code=~"5.."}[5m])
+              intervalMs: 60000
+              maxDataPoints: 43200
+          - refId: threshold
+            datasourceUid: "__expr__"
+            relativeTimeRange:
+              from: 300
+              to: 0
+            model:
+              type: threshold
+              refId: threshold
+              expression: rate
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0.05]
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+        noDataState: OK
+        execErrState: Error
+        isPaused: false
+
+      # ── Sync duration p95 alert ────────────────────────────────────────────
+      - uid: lexdiff-slow-sync
+        title: SlowSyncDuration
+        condition: threshold
+        for: 5m
+        labels:
+          severity: warning
+          team: lexdiff
+        annotations:
+          summary: "Act sync p95 duration exceeds 30 s"
+          description: >
+            p95 sync duration is {{ $values.dur.Value | humanize }}s.
+            The ELI API may be slow or the act has an unusually large structure.
+        data:
+          - refId: dur
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 600
+              to: 0
+            model:
+              expr: >
+                histogram_quantile(0.95,
+                  rate(lexdiff_sync_duration_seconds_bucket{result="synced"}[10m])
+                )
+              intervalMs: 60000
+              maxDataPoints: 43200
+          - refId: threshold
+            datasourceUid: "__expr__"
+            relativeTimeRange:
+              from: 600
+              to: 0
+            model:
+              type: threshold
+              refId: threshold
+              expression: dur
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [30]
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+        noDataState: OK
+        execErrState: Error
+        isPaused: false
+
+contactPoints:
+  - orgId: 1
+    name: lexdiff-ops
+    receivers:
+      # Uncomment and fill in to enable email alerts:
+      # - uid: lexdiff-email
+      #   type: email
+      #   settings:
+      #     addresses: ops@example.com
+      #     singleEmail: false
+
+      # Uncomment and fill in to enable Slack alerts:
+      # - uid: lexdiff-slack
+      #   type: slack
+      #   settings:
+      #     url: ${GRAFANA_SLACK_WEBHOOK_URL}
+      #     channel: "#lexdiff-alerts"
+      #     title: "LexDiff alert: {{ .CommonAnnotations.summary }}"
+
+policies:
+  - orgId: 1
+    receiver: lexdiff-ops
+    group_by: ["alertname", "severity"]
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h
+    routes:
+      - receiver: lexdiff-ops
+        matchers:
+          - severity = critical
+        group_wait: 10s
+        repeat_interval: 1h
