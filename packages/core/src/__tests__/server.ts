@@ -6,6 +6,9 @@ import {
   actStructFixture,
   unitTextFixtures,
   changedActsFixture,
+  actMpFixture,
+  ACT_MP_ELI,
+  searchResultsFixture,
 } from "./fixtures/eli-api.js";
 
 export const handlers = [
@@ -42,6 +45,16 @@ export const handlers = [
   // GET /changes/acts
   http.get(`${BASE_URL}/changes/acts`, () =>
     HttpResponse.json(changedActsFixture),
+  ),
+
+  // S6-10: M.P. publisher act
+  http.get(`${BASE_URL}/acts/MP/2023/512`, () =>
+    HttpResponse.json(actMpFixture),
+  ),
+
+  // S6-10: Search endpoint
+  http.get(`${BASE_URL}/acts/search`, () =>
+    HttpResponse.json(searchResultsFixture),
   ),
 ];
 
