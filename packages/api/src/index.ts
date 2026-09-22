@@ -24,6 +24,7 @@ import type {
 } from "@lexdiff/core";
 import { ActSyncService } from "./syncService.js";
 import { generateTimelinePdf } from "./pdf.js";
+import { assertSafeWebhookUrl } from "./channels/webhook.js";
 
 // ── Zod schemas for API responses ─────────────────────────────────────────────
 
@@ -101,7 +102,17 @@ const SubscriptionSchema = z.object({
 const CreateSubscriptionBodySchema = z.object({
   actEli: z.string().min(1),
   email: z.string().email(),
-  webhookUrl: z.string().url().nullable().optional(),
+  // S6-11: SSRF guard applied at schema level so invalid URLs are rejected
+  // before any DB write. assertSafeWebhookUrl enforces HTTPS + non-private.
+  webhookUrl: z
+    .string()
+    .url()
+    .refine(
+      (url) => { try { assertSafeWebhookUrl(url); return true; } catch { return false; } },
+      { message: "Webhook URL must be a public HTTPS URL" },
+    )
+    .nullable()
+    .optional(),
 });
 
 const SubscriptionIdParamSchema = z.object({
@@ -435,10 +446,13 @@ export function buildApp(repos: AppRepositories, injectedEliClient?: EliClient) 
         return a.effectiveDate < b.effectiveDate ? -1 : 1;
       });
       const pdf = await generateTimelinePdf(internalEli, events);
+      // S6-11: Strip newlines and non-printable chars from ELI before
+      // embedding in the Content-Disposition header to prevent header injection.
+      const safeEli = internalEli.replace(/[^\w/@.-]/g, "").replace(/\//g, "-");
       rep.header("Content-Type", "application/pdf");
       rep.header(
         "Content-Disposition",
-        `attachment; filename="lexdiff-${internalEli.replace(/\//g, "-")}.pdf"`,
+        `attachment; filename="lexdiff-${safeEli}.pdf"`,
       );
       return rep.send(pdf);
     },
