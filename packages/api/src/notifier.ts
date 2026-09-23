@@ -1,5 +1,6 @@
 // S5-15: Notifier — fan-out to email + webhook with dedup via NotificationLog.
 // S6-5: OTel spans on notifyForAct.
+// B-1: keyword + publisher subscriber fan-out.
 import { trace, SpanStatusCode } from "@opentelemetry/api";
 import type {
   ChangeEvent,
@@ -20,7 +21,11 @@ export class Notifier {
     private readonly webhookChannel: WebhookChannel,
   ) {}
 
-  async notifyForAct(actEli: string, events: ChangeEvent[]): Promise<void> {
+  async notifyForAct(
+    actEli: string,
+    events: ChangeEvent[],
+    actMeta?: { publisher: string; keywords: string[] },
+  ): Promise<void> {
     if (events.length === 0) return;
 
     const span = tracer.startSpan("Notifier.notifyForAct", {
@@ -28,7 +33,24 @@ export class Notifier {
     });
 
     try {
-      const subs = await this.subscriptionRepo.findByActEli(actEli);
+      // Collect all matching subscribers (act + keyword + publisher), dedupe by id.
+      const actSubs = await this.subscriptionRepo.findByActEli(actEli);
+      const subsById = new Map<string, Subscription>(
+        actSubs.map((s) => [s.id, s]),
+      );
+
+      if (actMeta) {
+        for (const kw of actMeta.keywords) {
+          for (const s of await this.subscriptionRepo.findByKeyword(kw)) {
+            subsById.set(s.id, s);
+          }
+        }
+        for (const s of await this.subscriptionRepo.findByPublisher(actMeta.publisher)) {
+          subsById.set(s.id, s);
+        }
+      }
+
+      const subs = Array.from(subsById.values());
       span.setAttribute("subscribers.count", subs.length);
 
       for (const sub of subs) {

@@ -130,3 +130,121 @@ describe("Notifier (S5-16)", () => {
     expect(webhookChannel.send).toHaveBeenCalledOnce();
   });
 });
+
+// ── B-1: Keyword + publisher subscriber fan-out ───────────────────────────────
+
+describe("Notifier B-1 — keyword + publisher fan-out", () => {
+  let subscriptionRepo: InMemorySubscriptionRepository;
+  let notificationLogRepo: InMemoryNotificationLogRepository;
+  let emailChannel: EmailChannel;
+  let webhookChannel: WebhookChannel;
+  let notifier: Notifier;
+
+  beforeEach(() => {
+    subscriptionRepo = new InMemorySubscriptionRepository();
+    notificationLogRepo = new InMemoryNotificationLogRepository();
+    emailChannel = makeStubEmailChannel();
+    webhookChannel = makeStubWebhookChannel();
+    notifier = new Notifier(
+      subscriptionRepo,
+      notificationLogRepo,
+      emailChannel,
+      webhookChannel,
+    );
+  });
+
+  it("notifies keyword subscriber when act has matching keyword", async () => {
+    await subscriptionRepo.save({
+      subscriptionType: "keyword",
+      keyword: "prawo cywilne",
+      email: "kw@example.com",
+      webhookUrl: null,
+    });
+
+    await notifier.notifyForAct(
+      "DU/2024/1",
+      [SAMPLE_EVENT],
+      { publisher: "DU", keywords: ["prawo cywilne", "umowy"] },
+    );
+
+    expect(emailChannel.send).toHaveBeenCalledOnce();
+    expect(emailChannel.send).toHaveBeenCalledWith(
+      expect.objectContaining({ to: "kw@example.com" }),
+    );
+  });
+
+  it("notifies publisher subscriber when act publisher matches", async () => {
+    await subscriptionRepo.save({
+      subscriptionType: "publisher",
+      publisherFilter: "DU",
+      email: "pub@example.com",
+      webhookUrl: null,
+    });
+
+    await notifier.notifyForAct(
+      "DU/2024/1",
+      [SAMPLE_EVENT],
+      { publisher: "DU", keywords: [] },
+    );
+
+    expect(emailChannel.send).toHaveBeenCalledOnce();
+    expect(emailChannel.send).toHaveBeenCalledWith(
+      expect.objectContaining({ to: "pub@example.com" }),
+    );
+  });
+
+  it("does NOT notify publisher subscriber when publisher does not match", async () => {
+    await subscriptionRepo.save({
+      subscriptionType: "publisher",
+      publisherFilter: "MP",
+      email: "pub@example.com",
+      webhookUrl: null,
+    });
+
+    await notifier.notifyForAct(
+      "DU/2024/1",
+      [SAMPLE_EVENT],
+      { publisher: "DU", keywords: [] },
+    );
+
+    expect(emailChannel.send).not.toHaveBeenCalled();
+  });
+
+  it("deduplicates subscriber who matches both act and keyword", async () => {
+    // Same email subscribed via both act ELI and keyword
+    await subscriptionRepo.save({
+      actEli: "DU/2024/1",
+      email: "overlap@example.com",
+      webhookUrl: null,
+    });
+    await subscriptionRepo.save({
+      subscriptionType: "keyword",
+      keyword: "prawo cywilne",
+      email: "overlap2@example.com",
+      webhookUrl: null,
+    });
+
+    // notifyForAct matches act subscription + keyword subscription; two distinct subs → 2 emails
+    await notifier.notifyForAct(
+      "DU/2024/1",
+      [SAMPLE_EVENT],
+      { publisher: "DU", keywords: ["prawo cywilne"] },
+    );
+
+    expect(emailChannel.send).toHaveBeenCalledTimes(2);
+  });
+
+  it("sends nothing when actMeta is absent and no act-type subs match", async () => {
+    await subscriptionRepo.save({
+      subscriptionType: "keyword",
+      keyword: "prawo cywilne",
+      email: "kw@example.com",
+      webhookUrl: null,
+    });
+
+    // No actMeta passed → keyword subs not consulted
+    await notifier.notifyForAct("DU/2024/1", [SAMPLE_EVENT]);
+
+    expect(emailChannel.send).not.toHaveBeenCalled();
+  });
+});

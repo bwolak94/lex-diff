@@ -105,7 +105,12 @@ export class Scheduler {
   private async _processRefreshAct(data: RefreshActPayload): Promise<void> {
     const events = await this.repos.changeEvents.findByActEli(data.actEli);
     if (events.length > 0) {
-      await this.notifier.notifyForAct(data.actEli, events);
+      // B-1: pass act metadata so the Notifier can fan-out to keyword/publisher subs.
+      const act = await this.repos.acts.findByEli(data.actEli);
+      const actMeta = act
+        ? { publisher: act.publisher, keywords: act.keywords }
+        : undefined;
+      await this.notifier.notifyForAct(data.actEli, events, actMeta);
     }
   }
 
