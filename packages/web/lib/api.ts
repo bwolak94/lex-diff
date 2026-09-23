@@ -154,7 +154,10 @@ export function searchEliActs(query: {
 
 export interface Subscription {
   id: string;
+  subscriptionType: "act" | "keyword" | "publisher";
   actEli: string;
+  keyword: string | null;
+  publisherFilter: string | null;
   email: string;
   webhookUrl: string | null;
   createdAt: string;
@@ -165,7 +168,10 @@ export function fetchSubscriptions(): Promise<Subscription[]> {
 }
 
 export async function createSubscription(body: {
-  actEli: string;
+  subscriptionType?: "act" | "keyword" | "publisher";
+  actEli?: string;
+  keyword?: string | null;
+  publisherFilter?: string | null;
   email: string;
   webhookUrl: string | null;
 }): Promise<Subscription> {

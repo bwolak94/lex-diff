@@ -102,7 +102,7 @@ export default function ActDetailPage({
                 ))}
               </div>
 
-              {/* Keywords */}
+              {/* Keywords — click to subscribe */}
               {act.keywords.length > 0 && (
                 <Card>
                   <CardHeader className="pb-3">
@@ -110,12 +110,14 @@ export default function ActDetailPage({
                   </CardHeader>
                   <CardContent className="flex flex-wrap gap-2 pt-0">
                     {act.keywords.map((kw) => (
-                      <span
+                      <Link
                         key={kw}
-                        className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600"
+                        href={`/subscriptions?keyword=${encodeURIComponent(kw)}`}
+                        title={`Subscribe to "${kw}" changes`}
+                        className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600 transition-colors hover:bg-slate-200"
                       >
                         {kw}
-                      </span>
+                      </Link>
                     ))}
                   </CardContent>
                 </Card>

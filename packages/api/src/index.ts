@@ -99,21 +99,36 @@ const SubscriptionSchema = z.object({
   createdAt: z.string(),
 });
 
-const CreateSubscriptionBodySchema = z.object({
-  actEli: z.string().min(1),
-  email: z.string().email(),
-  // S6-11: SSRF guard applied at schema level so invalid URLs are rejected
-  // before any DB write. assertSafeWebhookUrl enforces HTTPS + non-private.
-  webhookUrl: z
-    .string()
-    .url()
-    .refine(
-      (url) => { try { assertSafeWebhookUrl(url); return true; } catch { return false; } },
-      { message: "Webhook URL must be a public HTTPS URL" },
-    )
-    .nullable()
-    .optional(),
-});
+const WebhookUrlSchema = z
+  .string()
+  .url()
+  .refine(
+    (url) => { try { assertSafeWebhookUrl(url); return true; } catch { return false; } },
+    { message: "Webhook URL must be a public HTTPS URL" },
+  )
+  .nullable()
+  .optional();
+
+// B-1: discriminated union — act | keyword | publisher subscriptions.
+// S6-11: SSRF guard applied at schema level.
+const CreateSubscriptionBodySchema = z
+  .object({
+    subscriptionType: z.enum(["act", "keyword", "publisher"]).default("act"),
+    actEli: z.string().optional(),
+    keyword: z.string().min(1).optional(),
+    publisherFilter: z.string().min(1).optional(),
+    email: z.string().email(),
+    webhookUrl: WebhookUrlSchema,
+  })
+  .refine(
+    (b) => {
+      if (b.subscriptionType === "act") return (b.actEli ?? "").length > 0;
+      if (b.subscriptionType === "keyword") return (b.keyword ?? "").length > 0;
+      if (b.subscriptionType === "publisher") return (b.publisherFilter ?? "").length > 0;
+      return true;
+    },
+    { message: "The required identifier field is missing for the chosen subscription type" },
+  );
 
 const SubscriptionIdParamSchema = z.object({
   id: z.string().uuid(),
@@ -516,7 +531,10 @@ export function buildApp(repos: AppRepositories, injectedEliClient?: EliClient) 
     },
     async (req, rep) => {
       const sub = await repos.subscriptions.save({
-        actEli: req.body.actEli,
+        subscriptionType: req.body.subscriptionType,
+        ...(req.body.actEli !== undefined ? { actEli: req.body.actEli } : {}),
+        keyword: req.body.keyword ?? null,
+        publisherFilter: req.body.publisherFilter ?? null,
         email: req.body.email,
         webhookUrl: req.body.webhookUrl ?? null,
       });
