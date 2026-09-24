@@ -25,9 +25,20 @@ export interface UnitRepository {
   saveAll(eli: string, units: Unit[]): Promise<void>;
 }
 
+export type ChangeEventWithMeta = ChangeEvent & {
+  actEli: string;
+  createdAt: string;
+};
+
 export interface ChangeEventRepository {
   findByActEli(actEli: string): Promise<ChangeEvent[]>;
   saveAll(actEli: string, events: ChangeEvent[]): Promise<void>;
+  /** Paginated global feed sorted by insertion time descending. */
+  findRecent(opts: {
+    limit: number;
+    offset: number;
+    type?: string;
+  }): Promise<{ items: ChangeEventWithMeta[]; total: number }>;
 }
 
 export interface SubscriptionRepository {

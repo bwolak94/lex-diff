@@ -702,5 +702,67 @@ export function buildApp(repos: AppRepositories, injectedEliClient?: EliClient) 
     },
   );
 
+  // ── B-8: GET /changelog — global paginated change event feed ─────────────────
+  const ChangelogQuerySchema = z.object({
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+    offset: z.coerce.number().int().min(0).default(0),
+    type: z.enum([
+      "UnitAdded",
+      "UnitRepealed",
+      "UnitAmended",
+      "UnitRenumbered",
+      "ActRepealed",
+      "ActConsolidated",
+      "EntryIntoForceSet",
+    ]).optional(),
+  });
+
+  const ChangelogItemSchema = ChangeEventSchema.extend({
+    actEli: z.string(),
+    actTitle: z.string(),
+    createdAt: z.string(),
+  });
+
+  typed.get(
+    "/changelog",
+    {
+      schema: {
+        querystring: ChangelogQuerySchema,
+        response: {
+          200: z.object({
+            items: z.array(ChangelogItemSchema),
+            total: z.number(),
+          }),
+        },
+      },
+    },
+    async (req) => {
+      const { limit, offset, type } = req.query;
+      const { items, total } = await repos.changeEvents.findRecent({
+        limit,
+        offset,
+        ...(type ? { type } : {}),
+      });
+
+      // Batch-load act titles for unique ELIs
+      const uniqueElis = [...new Set(items.map((e) => e.actEli))];
+      const actMap = new Map<string, string>();
+      await Promise.all(
+        uniqueElis.map(async (eli) => {
+          const act = await repos.acts.findByEli(eli);
+          actMap.set(eli, act?.title ?? eli);
+        }),
+      );
+
+      return {
+        items: items.map((ev) => ({
+          ...ev,
+          actTitle: actMap.get(ev.actEli) ?? ev.actEli,
+        })),
+        total,
+      };
+    },
+  );
+
   return app;
 }

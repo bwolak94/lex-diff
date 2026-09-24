@@ -4,7 +4,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Scale, Search, Clock, GitCompare, Bell, Database, GitFork, Download } from "lucide-react";
+import { Scale, Search, Clock, GitCompare, Bell, Database, GitFork, Download, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const API_BASE = process.env["NEXT_PUBLIC_API_URL"] ?? "http://localhost:3001";
@@ -31,6 +31,7 @@ function Header() {
 
 const navItems = [
   { href: "/acts/search", label: "Search", icon: Search },
+  { href: "/changelog", label: "Changelog", icon: Activity },
   { href: "/subscriptions", label: "Subscriptions", icon: Bell },
   { href: "/admin/sync", label: "Local Acts", icon: Database },
 ] as const;

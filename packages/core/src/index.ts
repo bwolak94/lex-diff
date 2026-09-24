@@ -21,6 +21,7 @@ export type {
   ActRepository,
   UnitRepository,
   ChangeEventRepository,
+  ChangeEventWithMeta,
   SubscriptionRepository,
   JobCursorRepository,
   NotificationLogRepository,

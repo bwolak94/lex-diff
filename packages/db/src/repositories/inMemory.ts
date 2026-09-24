@@ -5,6 +5,7 @@ import type {
   ActMetadata,
   Unit,
   ChangeEvent,
+  ChangeEventWithMeta,
   Subscription,
   ActReference,
   User,
@@ -87,6 +88,25 @@ export class InMemoryChangeEventRepository implements ChangeEventRepository {
     for (const ev of events) {
       this._events.get(actEli)!.set(ev.eventHash, ev);
     }
+  }
+
+  async findRecent(opts: {
+    limit: number;
+    offset: number;
+    type?: string;
+  }): Promise<{ items: ChangeEventWithMeta[]; total: number }> {
+    const all: ChangeEventWithMeta[] = [];
+    for (const [actEli, byHash] of this._events) {
+      for (const ev of byHash.values()) {
+        if (!opts.type || ev.type === opts.type) {
+          all.push({ ...ev, actEli, createdAt: new Date().toISOString() });
+        }
+      }
+    }
+    return {
+      items: all.slice(opts.offset, opts.offset + opts.limit),
+      total: all.length,
+    };
   }
 }
 
