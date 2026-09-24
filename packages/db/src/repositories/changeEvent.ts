@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { eq, desc, count } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import type { ChangeEvent, Severity } from "@lexdiff/core";
+import type { ChangeEvent, Severity, ChangeEventWithMeta } from "@lexdiff/core";
 import type { ChangeEventRepository } from "@lexdiff/core";
 import { changeEvents } from "../schema/index.js";
 import type * as schema from "../schema/index.js";
@@ -29,6 +29,40 @@ export class DrizzleChangeEventRepository implements ChangeEventRepository {
       .from(changeEvents)
       .where(eq(changeEvents.actEli, actEli));
     return rows.map(rowToEvent);
+  }
+
+  async findRecent(opts: {
+    limit: number;
+    offset: number;
+    type?: string;
+  }): Promise<{ items: ChangeEventWithMeta[]; total: number }> {
+    const where = opts.type ? eq(changeEvents.type, opts.type) : undefined;
+
+    const [rows, countRows] = await Promise.all([
+      this.db
+        .select()
+        .from(changeEvents)
+        .$dynamic()
+        .where(where)
+        .orderBy(desc(changeEvents.createdAt))
+        .limit(opts.limit)
+        .offset(opts.offset),
+      this.db
+        .select({ value: count() })
+        .from(changeEvents)
+        .$dynamic()
+        .where(where),
+    ]);
+
+    const total = Number(countRows[0]?.value ?? 0);
+
+    const items = rows.map((row): ChangeEventWithMeta => ({
+      ...rowToEvent(row),
+      actEli: row.actEli,
+      createdAt: row.createdAt.toISOString(),
+    }));
+
+    return { items, total };
   }
 
   async saveAll(actEli: string, events: ChangeEvent[]): Promise<void> {

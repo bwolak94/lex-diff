@@ -266,6 +266,32 @@ export function fetchReferences(eli: string): Promise<{
   return apiFetch(`/acts/${encodeURIComponent(eli)}/references`);
 }
 
+// ── Changelog (B-8) ───────────────────────────────────────────────────────────
+
+export interface ChangelogItem extends ChangeEvent {
+  actEli: string;
+  actTitle: string;
+  createdAt: string;
+}
+
+export interface ChangelogResult {
+  items: ChangelogItem[];
+  total: number;
+}
+
+export function fetchChangelog(opts: {
+  limit?: number;
+  offset?: number;
+  type?: string;
+}): Promise<ChangelogResult> {
+  const params = new URLSearchParams();
+  if (opts.limit) params.set("limit", String(opts.limit));
+  if (opts.offset) params.set("offset", String(opts.offset));
+  if (opts.type) params.set("type", opts.type);
+  const qs = params.toString();
+  return apiFetch<ChangelogResult>(`/changelog${qs ? `?${qs}` : ""}`);
+}
+
 // ── Auth (B-5) ────────────────────────────────────────────────────────────────
 
 export interface User {
